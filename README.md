@@ -1,6 +1,6 @@
 # basemap
 
-Files to help me build the Clatsop County basemap layers and maps.
+A collection of files that help me build and publish the Clatsop County basemap layers and maps.
 
 The "basemap" used in most of our web maps is not a basemap at all, because we wanted
 to overlay roads (and other things) on top of different aerials. An Esri map can
