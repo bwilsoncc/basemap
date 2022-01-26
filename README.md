@@ -23,7 +23,19 @@ All it needs to do is define the projection, Web Mercator. I ended up using this
 (Originally I used the Esri grey map and set it to be 100% transparent. This still causes
 data transfers even though it's invisible.)
 
-PUBLISHING NOTE, the Reference Scale property can't be turned in the map.
+### Layer order problem
+
+Esri places arbitrary restrictions on the order of services in their maps.
+
+1. Basemaps can only go at the bottom. The reference layer associated with a basemap (normally containing the labels) goes near the top somewhere.
+2. Vector tile layers and Map Image Layers (MIL) can go in the middle in any order.
+3. Feature services have to go at the top.
+
+This means if you use lots of feature layers, they will stack up on top of your MIL and Vector layers. 
+If you are using Vector Tiles as labels, this is bad because it means your Feature layers will be on top of the labels.
+For us, in practice it's not so bad because very few feature layers are used in our maps. We mostly use MILs.
+
+** If you absolutely must have lots of Feature Layers and can't use MILs instead, this could be a problem preventing you from using labels in a Vector Tile layer **
 
 ## Collector notes
 
@@ -101,3 +113,14 @@ In order of usage for a workflow,
     scripts/colors.py   Finds the dominant color in an image, used in watermark.py.
 
     scripts/portal.py   PortalContent class, sadly forgotten work-in-progress 
+
+## Screenshots
+
+### Vector Labels only
+![Vector labels](assets/vector_reference.PNG)
+
+### Vector Features only
+![Vectors unlabeled](assets/vector_unlabeled.PNG)
+
+### Combined service
+![Vectors](assets/vector.PNG)
