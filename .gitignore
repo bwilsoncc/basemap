@@ -17,6 +17,7 @@ RasterFunctionsHistory
 # Temporary data storage
 *.gdb
 
-# Some Esri tool creates these
+# Some Esri tools create these
 ImportLog/
+.backups
 
