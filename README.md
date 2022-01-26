@@ -13,9 +13,9 @@ they'd float on top of other services. So this project creates three services.
 2. Vector Tiles - everything, useful in offline Collector and Field Maps applications.
 3. Unlabelled Tiles - feature layers without any labels, for web maps
 
-| 1 labels | 2 features | 3 labels and features |
-|----------|------------|-----------------------|
-| ![Vector labels](assets/vector_reference.PNG) | ![Vectors unlabeled](assets/vector_unlabeled.PNG) | ![Vectors](assets/vector.PNG) |
+| 1 labels | 2 features | 3 labels and features | vector + raster | 
+|----------|------------|-----------------------|-----------------|
+| ![Vector labels](assets/vector_reference.PNG) | ![Vectors unlabeled](assets/vector_unlabeled.PNG) | ![Vectors](assets/vector.PNG) | ![Webmap](assets/webmaps.png) |
 
 Along the way I had to 
 [learn how to author not-awful vector maps](https://pro.arcgis.com/en/pro-app/latest/help/mapping/map-authoring/author-a-map-for-vector-tile-creation.htm).
