@@ -1,0 +1,22 @@
+*.ags
+__pycache__
+*.geojson
+
+*.zip
+.pyHistory
+.ipynb_checkpoints
+Index
+RasterFunctionsHistory
+
+*.wms
+
+# These contain secrets
+.env
+*.sde
+
+# Temporary data storage
+*.gdb
+
+# Some Esri tool creates these
+ImportLog/
+
