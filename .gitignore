@@ -1,7 +1,7 @@
 *.ags
 __pycache__
 *.geojson
-
+Thumbs.db
 *.zip
 .pyHistory
 .ipynb_checkpoints
