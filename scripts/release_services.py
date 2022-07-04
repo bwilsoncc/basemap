@@ -1,6 +1,9 @@
 """
 This script will finalize the release of the vector tile services.
 
+2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
+2022-06-22 This version does not preserve thumbnail or comments.
+
 When you use "Update" from the web interface
    * the staging version will go away,
    * it will create an archive of the previous service, 
@@ -9,187 +12,204 @@ so instead I'm doing it all correctly here. Like this.
 
 1. If a published service is missing, create it.
 2. Else replace it with the staged layer.
-3. Fix up the metadata. This includes comments and thumbnails.
-4. Creates backups of the existing services. Mark the backup as deprecated.
-
+3. Fix up the metadata.
+4. Creates backups of the existing services. Marks the backup as deprecated.
 """
 import os, sys
 from arcgis.gis import GIS
 from datetime import datetime
 from portal import PortalContent, show
 from config import Config
+sys.path.insert(0,'')
+from utils import getServiceItem
 
-# These source titles rely on you deleting the old layers, which will have the same title.
-# If you don't there will be an error and this script will stop.
+TEST = True # If set true, use a bogus service so that it does not break all our the live maps.
+TEST = False # Okay, here we go!
+CONTOURS = True
 
-services = [
-    { # This is the layer with labels used for Collector and Field Maps apps.
-        "source_title": "Vector Tiles STAGED",
-        "target_title": "Vector Tiles",
-        "offline" : True, # Allow use in an offline map
-    },
-    { # This is the layer with only the labels
-        "source_title": "Vector Tile Labels STAGED", 
-        "target_title": "Vector Tile Labels",
-        "offline" : True, # Allow use in an offline map
-    },
-    { # This is the layer with only the shapes
-        "source_title": "Unlabeled Vector Tiles STAGED",
-        "target_title": "Unlabeled Vector Tiles",
-        "offline" : True, # Allow use in an offline map
+def replace_service(staged_item, target_item, archive_name) -> None:
+    """
+        Replace the released service with the staged service,
+    """
+
+    # Copy the properties we want to preserve.
+    copied = {
+        'description': staged_item.description,
+        'snippet': staged_item.snippet,
+        'accessInformation': staged_item.accessInformation,
+        'licenseInfo': staged_item.licenseInfo,
+
+        #'content_status': ???
+        #'can_delete': False,
+        #'protected': False,
+
+        # other interesting properties
+        #'banner':
+        #'access: 'public',
+        #'categories':
+        #'dependencies':,
+        #'listed':
+        #'properties':,
+        #'shared_with':,
+        #'tables':
+        #'tags':
     }
-]
-
-initials  = os.environ.get('USERNAME')[0:2].upper()
-datestamp = datetime.now().strftime("%Y%m%d %H%M") # good for filenames
-textmark  = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials # more readable
 
 
-def get_thumb(item, save_as) -> bool:
+    # replace_metadata=True should copy through the thumbnail, tag, description, and summary fields
+
+    gis.content.replace_service(replace_item=target_item, new_item=staged_item,
+        replaced_service_name=archive_name, replace_metadata=True
+    )
+
+    try:
+        # Override the rest of the metadata with what we want
+        # I could put an updated thumbnail here but it makes this script so complex...
+        target_item.update(item_properties=copied)
+    except Exception as e:
+        print("Could not update metadata.", e)
+
+    return
+
+def update_sharing(gis: object, pc: object, service_title: str, release_groups: object) -> None:
+    service_item = getServiceItem(gis, pc, service_title)
+    if not service_item:
+        return
+
+    # We've really hit the big time now,
+    service_item.content_status = "authoritative"
+    service_item.protect(enable=True)  # Turn on delete protection
+    # NB Setting groups does not work without allow_members_to_edit=True
+    try:
+        service_item.share(everyone=True, org=True,
+                        groups=release_groups, allow_members_to_edit=True)
+    except Exception as e:
+        print("Sharing permissions update failed. %s" % e)
+
+    return None
+
+def deprecate_service(archive_name) -> None:
     """
-    Download a thumbnail from the portal.
-    Return True or False.
-    """
-    with open(save_as, "wb") as fp:
-        bits = item.get_thumbnail()
-        fp.write(bits)
-    #print("Downloaded thumbnail \"%s\"." % save_as)
-    return True
+    Change the status on the replaced service to "deprecated".
+    """    
+    archive_ids = pc.find_ids(name=archive_name, type=pc.VectorTileService)
+    if len(archive_ids) == 1:
+        archive_item = gis.content.get(archive_ids[0])
+        archive_item.content_status = "deprecated"
+        archive_item.protect(enable = False)
+    else:
+        print("WARNING: I can't find an archive named \"%s\"." % archive_name)
+        archive_items = pc.find_items(name=archive_name, type=pc.VectorTileService)
+        show(archive_items)
+    return
 
 
 if __name__ == "__main__":
-    portal = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-    print("Logged in as " + str(portal.properties.user.username))
-    pc = PortalContent(portal)
-    
+    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    print("Logged in as " + str(gis.properties.user.username))
+    pc = PortalContent(gis)
+
     # Validate the group list.
     release_groups = pc.get_groups(Config.RELEASE_GROUP_LIST)
+
+    if TEST:
+        delete_me = getServiceItem(gis, pc, "TEST Vector Tiles")
+        if delete_me:
+            print("WARNING, for a complete test, service should not already exist. Up to you what you are testing...")
+
+        services = [
+            {  # Test case when there is no layer
+                "staged_title": "TEST NONEXISTENT STAGED",
+                "target_title": "TEST Vector Tiles",
+                "offline": True,  # Allow use in an offline map
+            },
+            {  # Test case when the target layer does not exist -- publishing
+                "staged_title": "TEST Vector Tiles STAGED",
+                "target_title": "TEST Vector Tiles",
+                "offline": True,  # Allow use in an offline map
+            },
+        ]
+        
+
+    elif CONTOURS:
+
+        # After the 10.9.1 the tile package was still on the server
+        # but the service was broken so I republished.
+
+        services = [
+            {
+                "staged_title": "Contour 40",
+                "target_title": "Contour 40",
+                "offline": True,  # Allow use in an offline map
+            },
+        ]
+
+
+    else:
+        services = [
+            {  # This is the layer with labels used for Collector and Field Maps apps.
+                "staged_title": "Vector Tiles STAGED",
+                "target_title": "Vector Tiles",
+                "offline": True,  # Allow use in an offline map
+            },
+            {  # This is the layer with only the labels
+                "staged_title": "Vector Tile Labels STAGED",
+                "target_title": "Vector Tile Labels",
+                "offline": True,  # Allow use in an offline map
+            },
+            {  # This is the layer with only the shapes
+                "staged_title": "Unlabeled Vector Tiles STAGED",
+                "target_title": "Unlabeled Vector Tiles",
+                "offline": True,  # Allow use in an offline map
+            }
+        ]
+
+    initials  = os.environ.get('USERNAME')[0:2].upper()
+    datestamp = datetime.now().strftime("%Y%m%d %H%M") # good for filenames
+    textmark  = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials # more readable
 
     for service in services:
         print("============")
         print(service)
 
-        source_title = service['source_title']
-        source_id = pc.find_id(title=source_title, type=pc.VectorTileService)
-        if not source_id: 
-            print("No service \"%s\" found." % source_title)
+        staged_title = service['staged_title']
+        staged_item = getServiceItem(gis, pc, staged_title)
+        if not staged_item:
             continue
 
-        # Load the metadata from the staged layer.
-        source_item = portal.content.get(source_id)
-        print("SOURCE ")
-        show(source_item)
-
         target_title = service['target_title']
-        target_id = pc.find_id(title=target_title, type=pc.VectorTileService)
-        if not target_id: 
+        target_item = getServiceItem(gis, pc, target_title)
+        if not target_item:
+            # We're doing a 'publish the first time', just rename. (This is fast.)
             publishAs = target_title
-        else:
-            target_item = portal.content.get(target_id)
-            print("TARGET")
-            show(target_item)
-
-            source_thumb = os.path.join(Config.SCRATCH_WORKSPACE, "new.png")
-            get_thumb(source_item, source_thumb)
-
-            old_thumb = os.path.join(Config.SCRATCH_WORKSPACE, "old.png")
-            get_thumb(target_item, old_thumb)
-
-        #assert(target_id == service['target_id'])
-
-        if target_id:
-            # We're doing a "replace"
-
-            # Fix up the metadata, it's still the old stuff.
-
-            # Copy the properties we want to preserve.
-            copied = {
-                'description': source_item.description,
-                'snippet': source_item.snippet,
-                'accessInformation': source_item.accessInformation,
-                'licenseInfo': source_item.licenseInfo,
-
-                #'content_status': ???
-                #'can_delete': False,
-                #'protected': False,
-
-                # other interesting properties
-                #'banner':
-                #'access: 'public',
-                #'categories':
-                #'dependencies':,
-                #'listed':
-                #'properties':,
-                #'shared_with':,
-                #'tables':
-                #'tags':
-            }
-
-            # Grab the comment list
-            comment_list = source_item.comments
-
-            # Figure out the name for the archive.
-            archive_name = 'ARCHIVED_' + target_item.name + '_' + datestamp.replace(' ','_')
-
-            portal.content.replace_service(replace_item=target_id, new_item=source_id,
-                replaced_service_name=archive_name, replace_metadata=False
-            )
-
-            try:
-                updated = target_item.update(item_properties=copied, thumbnail=source_thumb)
-                if updated:
-                    os.unlink(source_thumb)
-                else:
-                    print("\"update\" returned 'false' :-(")
-            except Exception as e:
-                print("Could not update thumbnail.", e)
-
-            # Remove the exalted status from the archive.
-            archive_id = pc.find_id(name=archive_name, type=pc.VectorTileService)
-            if archive_id:
-                archive_item = portal.content.get(archive_id)
-                archive_item.content_status = "deprecated"
-                archive_item.protect(enable = False)
-                try:
-                    # Replace the thumbnail on the archive with the old thumbnail.
-                    archive_item.update(thumbnail=old_thumb)
-                    os.unlink(old_thumb)   
-                except Exception as e:
-                    print("Could not replace thumbnail on archive.", e)
-            else:
-                print("WARNING I can't find the archive named \"%s\"." % archive_name)
-                archive_items = pc.find_items(name=archive_name, type=pc.VectorTileService)
-                show(archive_items)
+            staged_item.update(item_properties={"title": target_title})
+            staged_item.add_comment("Released into the wild! %s" % textmark)
+        elif target_item.type == 'Vector Tile Package':
+            # Well this code fails certainly 
             
+            # We're publishing a PACKAGE (Contours!) to turn it into a service.
+            #analyzed = gis.content.analyze(item=target_item)
+            #pp = analyzed['publishParameters']
+            #pp['name'] = target_item['Contour_40']
+            #pp['locationType'] = None
             try:
-                target_item.share(everyone=True, org=True, 
-                    groups=release_groups, allow_members_to_edit=True)
+                target_item.publish(
+                    #publish_parameters=pp, # optional when publishing a tile package
+                    file_type='vectortilepackage',
+                    output_type='Tiles',
+#                    item_id="46370d4ddea4440184a44736974897b5" # reuse!!
+                )
             except Exception as e:
-                print("Sharing permissions update failed. %s" % e)
-            # Copy the comments
-            for comment_item in comment_list:
-                # I might want to try to preserve the other properties of comment_item
-                # like the owner and timestamp? Or to indicate it was copied?
-                target_item.add_comment(comment_item.comment)          
-
+                print("Oh boy, ", e)
+                
         else:
-            # We're doing a 'publish the first time'
+            # We're doing a replacement. This takes a bit of time.
+            archive_name = 'ARCHIVED_' + target_item.name + '_' + datestamp.replace(' ','_')
+            replace_service(staged_item, target_item, archive_name)
+            target_item.add_comment("Released into the wild! %s" % textmark)
+            deprecate_service(archive_name)
 
-            # I think all I need to do is rename the VTS and I'm done.
-            # Everything else is already done.
+        update_sharing(gis, pc, target_title, release_groups)
 
-            source_item.update(item_properties={
-                "title": target_title,
-            })
-
-            # We've really hit the big time now,
-            source_item.content_status = "authoritative"
-            source_item.protect(enable = True) # Turn on delete protection
-
-            # NB Setting groups does not work without allow_members_to_edit=True
-            source_item.share(everyone=True, org=True,
-                groups=release_groups, allow_members_to_edit=True)
-
-            source_item.add_comment("Released into the wild! %s" % textmark)
-
-# That's all!
+print("============")
+print("That's all!")

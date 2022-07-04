@@ -1,17 +1,20 @@
 """
-Run this standalone to download and build feature classes for basemaps
+process_data.py
 
-Runs fast in VS Code
-or (DON't) run it in Arc Pro in a notebook, where it will throw errors over and over
+2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
+
+Run this standalone (that is, NOT inside ArcGIS Pro) to download and build feature classes for basemaps
+Runs fast in VS Code or run from Python Idle or some other IDE, 
+
+DON'T run it in Arc Pro in a Jupyter notebook, because first it will throw errors over and over
 and then when you finally get it to run it will tear out the original layer from the map
-and throw away the symbology you spent 3 days working on.
+and throw away the symbology you spent 3 days working on. You will shed tears.
 """
 import os
 import arcpy
 from config import Config
 
 cwd = os.getcwd()
-
 arcpy.env.overwriteOutput = True
 
 def unsplit_lines(src_layer, dissolve_attribute_list=None, attributes=None):
@@ -98,99 +101,105 @@ def unsplit_water_lines(water_lines_layer):
     return water_layer
 
 # ===============================
+if __name__ == "__main__":
+    # Find the map we are using.
+    # Normally version here is set to STAGING
+    # so that I don't have to wait for compression.
+    # (But if I did any edits I need to do a reconcile/post before running this!)
+    aprx = arcpy.mp.ArcGISProject(Config.APRX_FILE)
+    m = aprx.listMaps(Config.MAPNAME)[0]
+    print("map:",m.name)
 
-# Should this be necessary, here is how to sign in.
-# arcpy.SignInToPortal(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    # Find the file geodatabase to use as the destination.
+    fgdb = aprx.defaultGeodatabase
+    print("gdb:", fgdb)
 
-# Dig around in the APRX to find roads layer so that
-# I am reading data from my own version 
-# so that I don't have to wait for compression.
-# (But I do need to do a reconcile before running this!)
-aprx = arcpy.mp.ArcGISProject(Config.APRX_FILE)
-m = aprx.listMaps(Config.MAPNAME)[0]
-print("map:",m.name)
-fgdb = aprx.defaultGeodatabase
-print("gdb:", fgdb)
+    # List the layer names, just a sanity check.
+    all_layers = m.listLayers()
+    n = 0
+    for item in all_layers:
+        if item.isFeatureLayer and item.name:
+            print(n, item.name)
+        n += 1
 
-all_layers = m.listLayers()
-n = 0
-for item in all_layers:
-    if item.isFeatureLayer and item.name:
-        print(n, item.name)
-    n += 1
-
-try:
-    road_lines_layer = m.listLayers('Roads')[0]
-    water_lines_layer = m.listLayers('Water lines')[0]
-    water_polygons_layer = m.listLayers('Water polygons')[0]
-    parks_layer = m.listLayers('Parks')[0]
-    county_boundary_layer = m.listLayers('County Boundary')[0]
-except Exception as e:
-    print("Could not read all required layers.", e)
-    exit(-1)
-
-# I tried to set the version I wanted to read here and failed
-# every way possible. 
-
-# I tried reading the APRX file and failed there too. It worked for a few
-# months. Perhaps after upgrading ArcPro???  
-# No -- it's arcpy installed the wrong way somehow.
-#conn = "k:\\webmaps\\basemap\\cc-gis.sde"
-#arcpy.env.workspace = conn
-#roads = 'Clatsop.DBO.roads'
-#roads_layer = arcpy.management.MakeFeatureLayer('roads', 'roads_layer')
-    
-print("Roads dataset:", road_lines_layer.connectionProperties['dataset'])
-print("version:", road_lines_layer.connectionProperties['connection_info']['version'])
-
-print("Water dataset:", water_lines_layer.connectionProperties['dataset'])
-print("version:", water_lines_layer.connectionProperties['connection_info']['version'])
-
-arcpy.env.workspace = "in_memory"
-
-(roads, roads_unsplit) = unsplit_road_lines(road_lines_layer)
-water_layer = unsplit_water_lines(water_lines_layer)
-
-# Keep only features with names. No sense in having a popup
-# This is an idea but gives kind of bad feedback when you click and 
-# nothing happens. Better to tell as much as we know.
-#roads_layer = roads_unsplit + '_layer'
-#arcpy.management.MakeFeatureLayer(roads_unsplit, roads_layer, 
-#    where_clause='"StreetName" IS NOT NULL" AND StreetName"!=""'")
-#print("road layer =", arcpy.management.GetCount(roads_layer))
-
-layers = [
-    (roads_unsplit, "roads_unsplit"), # this is used for polylines and queries
-    (roads, "roads"), # this is used for labels
-
-    (water_layer, "water_lines"),
-    (water_polygons_layer, "water_polygons"),
-
-    (parks_layer, "parks"),
-
-    (county_boundary_layer, "county_boundary")
-]
-errors = 0
-for (src,dst) in layers:
+    # Point at all the required layers.
     try:
-        dst = os.path.join(fgdb, dst)
-        print("Reprojecting %s to %s" % (src, dst))
-        arcpy.management.Project(in_dataset=src, out_dataset=dst, 
-            out_coor_system = Config.WM_SRS, transform_method = Config.TRANSFORMS,
-            in_coor_system = Config.LOCAL_SRS,
-            preserve_shape="NO_PRESERVE_SHAPE", max_deviation="", vertical="NO_VERTICAL")
+        road_lines_layer = m.listLayers('Roads')[0]
+        water_lines_layer = m.listLayers('Water lines')[0]
+        water_polygons_layer = m.listLayers('Water polygons')[0]
+        parks_layer = m.listLayers('Parks')[0]
+        county_boundary_layer = m.listLayers('County Boundary')[0]
     except Exception as e:
-        print("Failed!", e)
-        errors += 1
+        print("Could not read all required layers.", e)
+        exit(-1)
 
-if errors:
-    print("There were errors (%d anyway), this is bad." % errors)
-    exit(-1)
+    # I tried to set the version I wanted to read here and failed
+    # every way possible. 
 
-dissolved = os.path.join(fgdb, 'roads_unsplit')
-desc =  arcpy.Describe(dissolved)
-fields = [(f.name, f.aliasName, f.baseName) for f in desc.fields]
-print(fields)
-print("All done!!")
+    # I tried reading the APRX file and failed there too.
+    # It worked for a few months. Perhaps after upgrading ArcPro???  
+    # No -- it's arcpy installed the wrong way somehow.
+    #conn = "k:\\webmaps\\basemap\\cc-gis.sde"
+    #arcpy.env.workspace = conn
+    #roads = 'Clatsop.DBO.roads'
+    #roads_layer = arcpy.management.MakeFeatureLayer('roads', 'roads_layer')
+        
+    # Sanity check -- show what version is selected.
+    print("Roads dataset:", road_lines_layer.connectionProperties['dataset'])
+    print("version:", road_lines_layer.connectionProperties['connection_info']['version'])
+
+    print("Water dataset:", water_lines_layer.connectionProperties['dataset'])
+    print("version:", water_lines_layer.connectionProperties['connection_info']['version'])
+
+    arcpy.env.workspace = "in_memory"
+
+    # Roads that are unsplit are better for query operations.
+    (roads, roads_unsplit) = unsplit_road_lines(road_lines_layer)
+    water_layer = unsplit_water_lines(water_lines_layer)
+
+    # Keep only features with names. No sense in having a popup when it's empty.
+    # This is an idea but gives kind of bad feedback when you click and 
+    # nothing happens. Better to tell as much as we know.
+    #roads_layer = roads_unsplit + '_layer'
+    #arcpy.management.MakeFeatureLayer(roads_unsplit, roads_layer, 
+    #    where_clause='"StreetName" IS NOT NULL" AND StreetName"!=""'")
+    #print("road layer =", arcpy.management.GetCount(roads_layer))
+
+    layers = [
+        (roads_unsplit, "roads_unsplit"), # this is used for polylines and queries
+        (roads, "roads"), # this is used for labels
+
+        (water_layer, "water_lines"),
+        (water_polygons_layer, "water_polygons"),
+
+        (parks_layer, "parks"),
+
+        (county_boundary_layer, "county_boundary")
+    ]
+    errors = 0
+    for (src,dst) in layers:
+        try:
+            dst = os.path.join(fgdb, dst)
+            print("Reprojecting %s to %s" % (src, dst))
+            arcpy.management.Project(in_dataset=src, out_dataset=dst, 
+                out_coor_system = Config.WM_SRS, transform_method = Config.TRANSFORMS,
+                in_coor_system = Config.LOCAL_SRS,
+                preserve_shape="NO_PRESERVE_SHAPE", max_deviation="", vertical="NO_VERTICAL")
+        except Exception as e:
+            print("Failed!", e)
+            errors += 1
+
+    if errors:
+        print("There were errors (%d anyway), this is bad." % errors)
+        exit(-1)
+
+    # Some random debug code that I could delete, 
+    # just shows the fields in "roads_unsplit".
+    dissolved = os.path.join(fgdb, 'roads_unsplit')
+    desc =  arcpy.Describe(dissolved)
+    fields = [(f.name, f.aliasName, f.baseName) for f in desc.fields]
+    print(fields)
+
+    print("All done!!")
 
 # That's all!

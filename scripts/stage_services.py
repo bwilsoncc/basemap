@@ -1,10 +1,13 @@
 """
+stage_services.py
+
+2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
+
 Builds the "basemap" vector tiles and stages them to the server.
-Once you have done QC use the release_services script.
+Once you have done QC, use the release_services script
+to publish them under the publicly accessible names.
 
-Watermarks are disabled right now, something broke there.
-
-TODO: Rewrite as a python tool
+Sadly, watermarks are disabled right now, something broke there.
 
 All the try/except blocks and if statements are part of a design
 philosophy that the script should always complete, even if it can't
@@ -20,11 +23,10 @@ from datetime import datetime
 from config import Config
 from scripts.portal import PortalContent, show
 
-#from watermark import mark
+TEST = True # Generate a test service only.
+TEST = False # Generate real services.
 
-# Scales https://www.esri.com/arcgis-blog/products/product/mapping/web-map-zoom-levels-updated/
-MIN_ZOOM = 1155581.108577  # LOD  9
-MAX_ZOOM = 70.5310735      # LOD 23
+#from watermark import mark
 
 def find_map(aprx, mapname):
     maps = aprx.listMaps(mapname)
@@ -46,6 +48,7 @@ def build_tile_package(map, pkgname, overwrite=False):
         if overwrite:
             os.unlink(pkgfile)
         else:
+            print("Reusing existing file, %s" % pkgfile)
             return pkgfile
 
     # I tried to add a description to the map object here but it did not work.
@@ -55,7 +58,7 @@ def build_tile_package(map, pkgname, overwrite=False):
     # BTW, that 99999 error you're getting could be a definition query problem.
     arcpy.management.CreateVectorTilePackage(map, pkgfile, 
         "ONLINE", None, "INDEXED", 
-        MIN_ZOOM, MAX_ZOOM
+        Config.MIN_ZOOM, Config.MAX_ZOOM
     )
 
     return pkgfile
@@ -180,7 +183,7 @@ def stage_tile_service(portal, pkg_item, pkgname, original_thumbnail, snippet, d
         print("service item", lyr_item)
 
     except Exception as e:
-        print("Publishing failed!", e)
+        print("Staging failed!", e)
         # "Service name 'Vector_Tiles' already exists for '0123456789'"
         items = pc.find_items(name=lyr_name) 
         show(items)
@@ -219,14 +222,15 @@ if __name__ == "__main__":
 
     (scriptpath, scriptname) = os.path.split(__file__)
 
-    arcpy.env.workspace = Config.SCRATCH_WORKSPACE 
+    arcpy.env.workspace = Config.SCRATCH_WORKSPACE # Normally C:\\Temp but your choice.
 
     initials  = os.environ.get('USERNAME')[0:2].upper()
     datestamp = datetime.now().strftime("%Y%m%d %H%M") # good for filenames
-    textmark  = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials # more readable
+    textmark  = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials # more readable by humans
 
     portal = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-    print("%s Logged in as %s" % (textmark, str(portal.properties.user.username)))
+    print("%s Logged in to %s as %s" %
+          (textmark, Config.PORTAL_URL, str(portal.properties.user.username)))
     pc = PortalContent(portal)
 
     try:
@@ -239,30 +243,40 @@ if __name__ == "__main__":
     <p>NOTE, it is in <b>WEB MERCATOR</b></p>"""
     project_desc = "<p>Project file: \"%s\"" % aprx.filePath
 
-    mapnames = [
-        {
-            "mapname": "Vector Tiles", 
-            "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
-It includes both the labels and the features in one vector tile layer.</p>""" + layer_desc + project_desc + Config.ATTRIBUTION,
-        },
-        {
-            "mapname": "Vector Tile Labels", 
-            "description": """<p>This layer contains only labels and the county boundary. Use it as a reference layer.</p>""" 
-                + layer_desc + project_desc + Config.ATTRIBUTION,
-        },
-        {
-            "mapname": "Unlabeled Vector Tiles", 
-            "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
-            + layer_desc + project_desc + Config.ATTRIBUTION,
-        }
-    ]
+    # The APRX file has to have maps with these mapnames defined.
+    if TEST:
+        mapnames = [
+            {
+                "mapname": "TEST Vector Tiles", 
+                "description": """<p>This is just a test and should be deleted.</p>"""
+                + Config.AUTOGRAPH,
+            },
+        ]
+    else:
+        mapnames = [
+            {
+                "mapname": Config.COMBINED_MAP, 
+                "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
+        It includes both the labels and the features in one vector tile layer.</p>"""
+                + layer_desc + project_desc + Config.AUTOGRAPH,
+            },
+            {
+                "mapname": Config.LABEL_MAP, 
+                "description": """<p>This layer contains only labels and the county boundary. Use it as a reference layer.</p>""" 
+                + layer_desc + project_desc + Config.AUTOGRAPH,
+            },
+            {
+                "mapname": Config.FEATURE_MAP, 
+                "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
+                + layer_desc + project_desc + Config.AUTOGRAPH,
+            }
+        ]
 
     # Validate the group list
     staging_groups = pc.get_groups(Config.STAGING_GROUP_LIST)
-
     total = len(mapnames)
 
-    print("Building tile packages.")
+    print("Building tile package(s).")
     n = 0
     for item in mapnames:
         mapname = item["mapname"]
@@ -286,6 +300,7 @@ It includes both the labels and the features in one vector tile layer.</p>""" + 
             if e.args[0].startswith("ERROR 001117"):
                 print("ERROR. You need to open the APRX file in ArcGIS Pro and put a description in \"%s\"." % mapname)
                 print("Skipping \"%s\"." % mapname)
+            item['pkgfile'] = ''
             continue
     print("Build completed.")
 
@@ -300,7 +315,7 @@ It includes both the labels and the features in one vector tile layer.</p>""" + 
         original_thumbnail = map.metadata.thumbnailUri
         ok = os.path.exists(original_thumbnail)
 
-        print("%s Uploading tile package. %s" % (progress, pkgname))
+        print("%s Uploading tile package. %s" % (progress, pkgfile))
         pkg_item = upload_tile_package(portal, pkgname, pkgfile, original_thumbnail, textmark, item["description"], overwrite=True)
         if not pkg_item: continue
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.

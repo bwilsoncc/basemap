@@ -1,47 +1,66 @@
 # basemap
 
-A collection of files that help me build and publish the Clatsop County basemap layers and maps.
+2022-07-01 Currently used with ArcGIS Pro 2.9.3 and ArcGIS Enterprise 10.9.1
 
-The "basemap" used in most of our web maps is not a basemap at all, because we wanted
-to overlay roads (and other things) on top of different aerials. An Esri map can
-have only one "basemap" at a time. 
+Tools that help build and publish the Clatsop County base layers and maps.
 
-Once I had that worked out I wanted to have the labels up high in the stack so that
-they'd float on top of other services. So this project creates three services.
+This started out to be an Esri basemap, but it is not possible to overlay a "basemap" on top of an aerial photo. An Esri map can have only one "basemap" at a time. 
+
+We call it "the basemap" but it's actually three vector tile services
+and a map image layer used for querying.
+
+Since every Esri map requires a basemap (it defines the projection),
+this project also creates an "Empty basemap", which is a real basemap with a projection, but has no data in it! (The Esri grey map and set it to be 100% transparent still causes data transfers even though it's invisible.)
+
+Raster tiles are bulky and slow and take a long time to build, vector
+tiles are fast and small but Esri won't let you query them,
+so the project uses a Roads layer for queries.
+
+In summary, now we have:
 
 1. Vector Labels - the labels only, and a county boundary line, for web maps.
-2. Vector Tiles - everything, useful in offline Collector and Field Maps applications.
-3. Unlabelled Tiles - feature layers without any labels, for web maps
+2. Roads map containing two feature layers
+3. Vector Tiles - everything, useful offline for example in Field Maps.
+4. Unlabelled Tiles - feature layers without any labels, for web maps
+5. "Empty basemap" (that's its name.)
 
-| 1 labels | 2 features | 3 labels and features | vector + raster | 
-|----------|------------|-----------------------|-----------------|
+| labels | features | labels and features | vector + raster |
+|--------|----------|---------------------|-----------------|
 | ![Vector labels](assets/vector_reference.PNG) | ![Vectors unlabeled](assets/vector_unlabeled.PNG) | ![Vectors](assets/vector.PNG) | ![Webmap](assets/webmaps.png) |
 
-Along the way I had to 
-[learn how to author not-awful vector maps](https://pro.arcgis.com/en/pro-app/latest/help/mapping/map-authoring/author-a-map-for-vector-tile-creation.htm).
+Here is some advice on [how to author not-awful vector maps](https://pro.arcgis.com/en/pro-app/latest/help/mapping/map-authoring/author-a-map-for-vector-tile-creation.htm).
 
-In Collector, every map has to have a "real basemap" but I don't want to incur massive
-downloads and require a live connection to the Internet.
-To work around this, I created an empty basemap called "Empty Basemap". 
-All it needs to do is define the projection, Web Mercator. I ended up using this in all my web maps too.
-(Originally I used the Esri grey map and set it to be 100% transparent. This still causes
-data transfers even though it's invisible.)
+The vector datasets also help a lot with Field Maps. They helped with Collector too. (R.I.P.)
+In Field Maps, every map has to have a "real basemap" but I don't want to incur massive downloads and to require a live connection to the Internet.
 
-### Layer order problem
+## Prerequisites
 
-Esri places arbitrary restrictions on the order of services in their maps.
+First time around,clone the standard Python environment then add things to it. If you upgrade Pro then you can upgrade the environment
+but it's probably faster to nuke it and start over.
+
+```bash
+conda env remove --name arcgispro29
+conda create --clone /c/Program\ Files/ArcGIS/Pro/bin/Python/envs/arcgispro-py3 --name arcgispro29
+conda activate arcgispro29
+conda install autopep8
+proswap arcgispro29
+```
+
+## Regarding the layer order problem in the Esri web map viewer
+
+Esri places arbitrary restrictions on the order of services in their maps. This is true in "Map Viewer Classic". I have not tested the new Map Viewer yet.
 
 1. Basemaps can only go at the bottom. The reference layer associated with a basemap (normally containing the labels) goes near the top somewhere.
 2. Vector tile layers and Map Image Layers (MIL) can go in the middle in any order.
 3. Feature services have to go at the top.
 
-This means if you use lots of feature layers, they will stack up on top of your MIL and Vector layers. 
-If you are using Vector Tiles as labels, this is bad because it means your Feature layers will be on top of the labels.
-For us, in practice it's not so bad because very few feature layers are used in our maps. We mostly use MILs.
+This means if you use lots of feature layers, they will stack up on top of your MIL and Vector layers.
+If you are using Vector Tiles as labels, this is bad because it means your Feature layers will cover over the labels.
+For us, in practice it's not so bad because very few feature layers are used in our maps. We mostly use MILs right now. 
 
-** If you absolutely must have lots of Feature Layers and can't use MILs instead, this could be a problem preventing you from using labels in a Vector Tile layer **
+**If you absolutely must have lots of Feature Layers and can't use MILs instead, this could be a problem preventing you from using labels in a Vector Tile layer**
 
-## Collector notes
+## Collector notes (also Field Maps?)
 
 ___Once you get the vector tile package built and published, you won't want to use the service in Collector.___
 
@@ -49,13 +68,13 @@ You _have_ to sideload the tile package so that you can use it offline. Otherwis
 an ONLINE map, just one that uses less cellular data (assuming you have a connection) for field work.
 Much of our county does not have cellular data connectivity.
 
-Here are 
+Here are
 [Esri instructions on how to sideload](https://www.esri.com/arcgis-blog/products/collector/field-mobility/speed-up-offline-collector-deployments-using-sideloaded-basemaps/)
 
-I still wanted to avoid the issue of sideloading when online work is okay, so I also built a raster tile map. The tricks here include 
-(1) __YOUR MAP MUST HAVE AN EDITABLE LAYER__ This means there is no hope to author a map and let people use it just for navigation. Forget Collector for that. 
-(2) Everything has to be shared correctly and hosted on the server 
-(3) if you meet all the requirements and you enable offline use then you will be able to download. Otherwise the map shows in Collector and it's not downloadable. 
+I still wanted to avoid the issue of sideloading when online work is okay, so I also built a raster tile map. The tricks here include
+(1) __YOUR MAP MUST HAVE AN EDITABLE LAYER__ This means there is no hope to author a map and let people use it just for navigation. Forget Collector for that.
+(2) Everything has to be shared correctly and hosted on the server
+(3) if you meet all the requirements and you enable offline use then you will be able to download. Otherwise the map shows in Collector and it's not downloadable.
 (4) I am pretty sure you have to manage the downloadable areas from the browser to create them in advance. That's the only way I could see them in Collector. I think Field Maps lets you define them on the fly from the device.
 
 Anyway, back to designing a vector map, here is a checklist.
@@ -75,11 +94,50 @@ Best practices
 
 ## Workflow
 
+### Creating the "Empty" basemap
+
+<https://learn.arcgis.com/en/projects/design-and-publish-basemaps/>
+
+The data for this map never changes.
+But after I did an Esri "upgrade" it was broken.
+
+When building the empty basemap,
+
+1. Open the "No basemap" map in the basemap project.
+2. Run "Create Vector Tile Index".
+3. In properties make sure the extent is set to
+
+```text
+    46.4
+-124    123
+    45.6
+```
+
+4. "Share as Web Layer"
+5. In "General" tab,
+
+* "Copy all data", "Vector Tile"
+* Set the tags to Clatsop County, Vector tiles, Basemap
+
+6. In "Configuration" tab,
+
+* Set to "Cache locally".
+* Set scale range from 9 (County) to 20 (Houses)
+* Point to the index you created earlier.
+
+### Use scripts
+
 scripts/        Scripts for building basemaps and publishing them
+
+The scripts use maps in an APRX file,
+
+* make sure the map it uses does not have any selections
+* make sure the data sources are correct, you might want STAGING version for example.
 
 In order of usage for a workflow,
 
     process_data.py     status: working
+        Make sure you pull the version you want, typically either from Default or Staging.
         Downloads data from the Enterprise GDB to a local FGDB and reprojects it to Web Mercator.
         Processes copied data; unsplits roads and water lines and removes unwanted attributes.
 
@@ -89,20 +147,35 @@ In order of usage for a workflow,
         and then publishes them on the portal.
         They always get named with timestamps so no existing services are ever injured (aka overwritten).
 
+    publish_roads.py    status: working
+        Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
+        This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
+
     release_services.py  status: working
         If a tile service does not exist, create it
         else replace existing vector tile services.
         Controlled by a table near the top of the source file.
 
-    publish roads  status: No script yet
-        I still publish a Map Image Layer for Roads after doing the above processing. 
-        Use the Roads map in basemap.aprx, use "share" and overwrite the existing layer.
-        This layer is used for queries (popups), which are not supported by Esri with vector tiles.
-
     republish_raster_tiles.py   status: ABANDONED
         This was to be used for republishing raster tiles, just here for cold storage.
         TODO Read the code and update this note!!
 
+### Republish Roads feature layer
+
+1. First run "process_data.py", that will import current data into the local FGDB used here.
+2. Open the basemap project, (k:\webmaps\basemap\basemap.aprx) open (or select) the Roads map.
+3. Use Share->Web Layer->Overwrite Web Layer (destination is my folder "Basemaps")
+4. Discover it won't let you. Curse the fact that overwrite only works 1/2 the time.
+
+* Delete Roads and republish it. Currently it's a Map Image Layer so this won't work.
+* Open each map that used Roads.
+* Add the new Roads feature service.
+* Fix up the query and popup again.
+
+8. Do more work on automating this step again.
+
+2022-03-16 I noticed there is now a "queryable" option when publishing
+a vector layer, but it threw an error when I tried it.
 
 ## Some additional files
 
@@ -118,3 +191,4 @@ In order of usage for a workflow,
 
     scripts/portal.py   PortalContent class, sadly forgotten work-in-progress 
 
+```

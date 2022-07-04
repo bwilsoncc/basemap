@@ -5,17 +5,20 @@ Currently it's a different version of the 'search' method that does exact
 instead of fuzzy searches by using the REST 'filter' option.
 
 find_* comments
-    Weirdness #1: This only searchs PORTAL and if for any reason a "delete" fails
+    Weirdness #1: This only searches PORTAL and if for any reason a "delete" fails
     to delete the SERVICE on the SERVER, then when you try to publish, this 
     function will not find any service but the publishing will FAIL saying the
-    service already exists and currently that means going to server manager
-    and finding and deleting the service manually!!
+    service already exists and currently that means going to Server Manager
+    and finding and deleting the service manually. Sometimes that fails too
+    and you have to actually delete files from server.
 
     Weirdness #2: if you search for a name with an extension on it, eg "tilepack.vtpk",
     and there is a file by that name, it will strip off the extension and the search
     will fail. You need to search by name="tilepack" and type="Vector Tile Package",
     or I need to modify this function to strip the extension and add the type!
-    See the unit tests for examples.
+    See the unit tests for examples. 
+    I think that it's a bug that it let me publish with the extension 
+    and now the poor thing is stranded in there.
 
 """
 import os
@@ -33,7 +36,7 @@ class PortalContent(object):
     def find_items(self, title=None, name=None, type=None) -> list:
         """ 
         Search the Portal using any combination of name, title, and type.
-        Return the list of items if there were any matches else None.
+        Return the list of items, which might be empty.
         """
         connection = self.gis._con
 
@@ -53,31 +56,31 @@ class PortalContent(object):
             'filter': q  # This is the exact match operation.
         }
         res = connection.post(url, params)
-        if res['total'] > 0:
-            return res['results']
-        return None
+        return res['results']
+
 
     def find_item(self, title=None, name=None, type=None):
         """ 
         Search the Portal using any combination of name, title, and type.
-        Return the item if exactly one match is found, else None.
+        Return the item if EXACTLY ONE MATCH is found, else None.
         """
         items = self.find_items(title, name, type)
         if not items or len(items)!=1:
             return None
         return self.gis.content.get(items[0]['id'])
 
-    def find_id(self, title=None, name=None, type=None):
+
+    def find_ids(self, title=None, name=None, type=None) -> list:
         """ 
         Search the Portal using any combination of name, title, and type.
-        Return the id if exactly one match is found, else None.
+        Return a list of ids, which might be empty.
         """
-        item = self.find_item(title, name, type)
-        if not item: 
-            return None
-        return item.id
+        items = self.find_items(title, name, type)
+        ids = [item['id'] for item in items]
+        return ids
 
-    def get_groups(self, groups):
+
+    def get_groups(self, groups) -> list:
         """
             Search the groups on the portal using a string or list of strings.
             Return a list of IDs that can be used to set groups on items.
@@ -120,7 +123,7 @@ def show(items) -> None:
 #       print(json.dumps(items, indent=4)) # This is the verbose version
         if not isinstance(items, list): items = [items]
         for item in items:
-            print(item["id"], item["name"], '||', item["title"], '||', item["type"])
+            print(item)
     return
 
 if __name__ == '__main__':
@@ -131,7 +134,13 @@ if __name__ == '__main__':
     print("Logged in as " + str(portal.properties.user.username))
     pc = PortalContent(portal)
 
-    item = pc.find_item(title='Clatsop_County', type=pc.VectorTileService)
+    items = pc.find_items(title='Vector Tiles STAGED', type=pc.VectorTileService)
+    show(items)
+
+    ids = pc.find_ids(title='Vector Tiles STAGED', type=pc.VectorTileService)
+    show(ids)
+
+    item = pc.find_item(title='Vector Tiles STAGED', type=pc.VectorTileService)
     show(item)
 
     groups = pc.get_groups(Config.STAGING_GROUP_LIST)
@@ -149,18 +158,19 @@ if __name__ == '__main__':
     show(pc.find_items(name='Unlabeled_Vector_Tiles',
         title='Unlabeled_Vector_Tile_Layer'))
 
-    show(pc.find_items(type=pc.VectorTileService))
+    #all = pc.find_items(type=pc.VectorTileService)
+    #print(all)
 
     # SADLY it's still not an exact match! See comments at the top of the file
-    print(pc.find_id(name='Unlabeled_Vector_Tiles.vtpk')) # This fails even if the file exists
+    print(pc.find_ids(name='Unlabeled_Vector_Tiles.vtpk')) # This fails even if the file exists
 
-    print(pc.find_id(name='Unlabeled_Vector_Tiles', type=pc.VectorTilePackage))
+    print(pc.find_ids(name='Unlabeled_Vector_Tiles', type=pc.VectorTilePackage)) # FIND THE PACKAGE
 
-    print(pc.find_id(title='Unlabeled_Vector_Tiles'))
-    print(pc.find_id(title='Unlabeled_Vector_Tiles', type=pc.VectorTileService))
-
-    print(pc.find_id(name='Unlabeled_Vector_Tiles',
-        title='Unlabeled_Vector_Tile_Layer',
+    # These should all give the same result.
+    print(pc.find_ids(title='Unlabeled Vector Tiles'))
+    print(pc.find_ids(title='Unlabeled Vector Tiles', type=pc.VectorTileService))
+    print(pc.find_ids(name='Unlabeled_Vector_Tiles',
+        title='Unlabeled Vector Tiles',
         type=pc.VectorTileService))
 
     exit(0)
