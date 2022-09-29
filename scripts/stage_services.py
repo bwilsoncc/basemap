@@ -1,7 +1,7 @@
 """
 stage_services.py
 
-2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
+2022-09-15 Tested with Server 10.9.1, ArcGIS Pro 2.9.4
 
 Builds the "basemap" vector tiles and stages them to the server.
 Once you have done QC, use the release_services script

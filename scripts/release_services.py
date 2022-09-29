@@ -25,7 +25,7 @@ from utils import getServiceItem
 
 TEST = True # If set true, use a bogus service so that it does not break all our the live maps.
 TEST = False # Okay, here we go!
-CONTOURS = True
+CONTOURS = False
 
 def replace_service(staged_item, target_item, archive_name) -> None:
     """

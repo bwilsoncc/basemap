@@ -50,6 +50,7 @@ def unsplit_lines(src_layer, dissolve_attribute_list=None, attributes=None):
 
     return (scratch, dissolved)
 
+
 def unsplit_road_lines(road_lines_layer):
     # Typically I screw up here by selecting a road and saving the project
     # so, clear selection before copying. Unfortunately a bug prevents it from working.
@@ -80,6 +81,7 @@ def unsplit_road_lines(road_lines_layer):
 
     return roads, roads_unsplit
 
+
 def unsplit_water_lines(water_lines_layer):
     # Unsplitting water lines have 0 useful names,
     # but doing this does remove unwanted attributes.
@@ -100,6 +102,7 @@ def unsplit_water_lines(water_lines_layer):
     #    exit(-1)
     return water_layer
 
+
 # ===============================
 if __name__ == "__main__":
     # Find the map we are using.
@@ -108,7 +111,7 @@ if __name__ == "__main__":
     # (But if I did any edits I need to do a reconcile/post before running this!)
     aprx = arcpy.mp.ArcGISProject(Config.APRX_FILE)
     m = aprx.listMaps(Config.MAPNAME)[0]
-    print("map:",m.name)
+    print(f"project: {Config.APRX_FILE} map: {m.name}")
 
     # Find the file geodatabase to use as the destination.
     fgdb = aprx.defaultGeodatabase
