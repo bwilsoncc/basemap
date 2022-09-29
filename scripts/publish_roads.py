@@ -3,8 +3,8 @@ publish_roads.py
 
 Publish the roads feature class from the Roads map in basemap.aprx.
 It will be a Map Image Layer and the "Roads" layer therein will
-be queryable, so that we can generate meaningful popups.
-There is also "Roads by Jurisdiction".
+be queryable (but invisible), so that we can generate meaningful popups.
+There is also a layer "Roads by Jurisdiction", it is symbolized by jurisdiction.
 """
 import os, sys
 import datetime
@@ -22,10 +22,9 @@ def find_map(aprx, mapname):
     return maps[0]
 
 
-def create_service_definition(map: object, item: dict, folder: str) -> str:
+def create_service_definition(map: object, item: dict, folder: str, sd_file: str):
     """
-    Create an sd file.
-    Returns the path to the sd file.
+    Create an sd file named "sd_file".
     """
     # https://pro.arcgis.com/en/pro-app/2.9/arcpy/mapping/map-class.htm
     # (It's possible to pass a layerlist here to limit what gets published)
@@ -43,13 +42,12 @@ def create_service_definition(map: object, item: dict, folder: str) -> str:
     sddraft.portalFolder = item["folder"]
     # sddraft.summary = "say something here"
     # sddraft.serverFolder
-    sddraft.overwriteExistingService = True
+    sddraft.overwriteExistingService = True # WELL THIS FAILS SPECTACULARLY
 
     # The draft file is an XML file.
     sddraft_file = os.path.join(Config.SCRATCH_WORKSPACE, pkgname + ".sddraft")
 
     sddraft.exportToSDDraft(sddraft_file)
-    sd_file = os.path.join(Config.SCRATCH_WORKSPACE, pkgname + ".sd")
 
     if os.path.exists(sd_file):
         #return sd_file # Uncomment this line for faster debugging.
@@ -60,7 +58,7 @@ def create_service_definition(map: object, item: dict, folder: str) -> str:
     # The 7z file contains a FGDB and various settings.
     arcpy.server.StageService(sddraft_file, sd_file)
 
-    return sd_file
+    return
 
 
 def delete_item(item) -> bool:
@@ -108,8 +106,8 @@ if __name__ == "__main__":
             + layer_desc
             + project_desc
             + "<br />" + Config.AUTOGRAPH,
-            "folder": "TESTING_Brian",
-            "pkgname": "DELETEME_" + Config.ROAD_MAP.replace(" ", "_"),
+            #"folder": "TESTING_Brian", "pkgname": "DELETEME_" + Config.ROAD_MAP.replace(" ", "_"), # TEST RUN
+            "folder": "Public Works", "pkgname": Config.ROAD_MAP.replace(" ", "_"), # SHOWTIME!!!!
         }
     ]
 
@@ -132,18 +130,22 @@ if __name__ == "__main__":
 
         # https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/automate-sharing-web-layers.htm
 
-        print(progress, 'Building "%s".' % item["pkgname"])
-
-        # 1. Create a service definition draft
-        # 2. Stage the service (zip)
-
-        sd_file = create_service_definition(map, item, item["folder"])
+        sd_file = os.path.join(Config.SCRATCH_WORKSPACE, pkgname + ".sd")
+        if arcpy.Exists(sd_file):
+            print(f"Using existing file \"{sd_file}\".")
+        else:
+            print(progress, 'Building "%s".' % item["pkgname"])
+            
+            # 1. Create a service definition draft
+            # 2. Stage the service (zip)
+            create_service_definition(map, item, item["folder"], sd_file)
 
         # 3. Upload the service definition
-        #  * First I try to update an existing definition.
+        # THIS WILL DESTROY AN EXISTING SERVICE
+        #  * First I should try to update an existing definition.
         #  * If that fails then I create a new one...
 
-        print('Uploading definition using "%s" %s' % (pkgname, item["folder"]))
+        print('Uploading definition using "%s" to "%s" folder.' % (pkgname, item["folder"]))
 
         # Upload the service definition to SERVER
         # In theory everything needed to publish the service is already in the SD file.
@@ -163,6 +165,8 @@ if __name__ == "__main__":
                 )
                 print('Skipping "%s".' % mapname)
             continue
+
+        # Add a comment to the service
 
         gis = GIS(Config.PORTAL_URL, username=Config.PORTAL_USER, password=Config.PORTAL_PASSWORD)            
         target_item = getServiceItem(gis, PortalContent(gis), pkgname)
