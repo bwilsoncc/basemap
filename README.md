@@ -1,13 +1,11 @@
 # basemap
 
-2022-07-01 Currently used with ArcGIS Pro 2.9.3 and ArcGIS Enterprise 10.9.1
-
 Tools that help build and publish the Clatsop County base layers and maps.
 
-This started out to be an Esri basemap, but it is not possible to overlay a "basemap" on top of an aerial photo. An Esri map can have only one "basemap" at a time. 
+2022-09-15 Currently used with ArcGIS Pro 2.9.4 and ArcGIS Enterprise 10.9.1
 
-We call it "the basemap" but it's actually three vector tile services
-and a map image layer used for querying.
+This started out to be an actual Esri "basemap", but it is not possible to overlay a "basemap" on top of an aerial photo. An Esri map can have only one "basemap" at a time. 
+We call it "the basemap" but it's actually three vector tile services and a map image layer used for querying. Vector services work the way I want.
 
 Since every Esri map requires a basemap (it defines the projection),
 this project also creates an "Empty basemap", which is a real basemap with a projection, but has no data in it! (The Esri grey map and set it to be 100% transparent still causes data transfers even though it's invisible.)
@@ -16,7 +14,7 @@ Raster tiles are bulky and slow and take a long time to build, vector
 tiles are fast and small but Esri won't let you query them,
 so the project uses a Roads layer for queries.
 
-In summary, now we have:
+In summary, we have 5 components now:
 
 1. Vector Labels - the labels only, and a county boundary line, for web maps.
 2. Roads map containing two feature layers
@@ -125,14 +123,17 @@ When building the empty basemap,
 * Set scale range from 9 (County) to 20 (Houses)
 * Point to the index you created earlier.
 
-### Use scripts
+## The workflow with these scripts
 
 scripts/        Scripts for building basemaps and publishing them
 
-The scripts use maps in an APRX file,
+The scripts use maps in an APRX file, K:\webmaps\basemap\basemap.aprx.
 
+* most settings are in config.py; .env has some secrets in it
 * make sure the map it uses does not have any selections
 * make sure the data sources are correct, you might want STAGING version for example.
+
+### Republish vector layers
 
 In order of usage for a workflow,
 
@@ -147,14 +148,14 @@ In order of usage for a workflow,
         and then publishes them on the portal.
         They always get named with timestamps so no existing services are ever injured (aka overwritten).
 
-    publish_roads.py    status: working
-        Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
-        This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
-
     release_services.py  status: working
         If a tile service does not exist, create it
         else replace existing vector tile services.
         Controlled by a table near the top of the source file.
+
+    publish_roads.py    status: sort of working, use at your own risk, see next section
+        Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
+        This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
 
     republish_raster_tiles.py   status: ABANDONED
         This was to be used for republishing raster tiles, just here for cold storage.
@@ -163,16 +164,19 @@ In order of usage for a workflow,
 ### Republish Roads feature layer
 
 1. First run "process_data.py", that will import current data into the local FGDB used here.
-2. Open the basemap project, (k:\webmaps\basemap\basemap.aprx) open (or select) the Roads map.
-3. Use Share->Web Layer->Overwrite Web Layer (destination is my folder "Basemaps")
+2. Open the basemap project, (k:\webmaps\basemap\basemap.aprx) open the Roads map.
+3. Use Share->Web Layer->Overwrite Web Layer (destination is in my folder "Public Works")
+Read about the [dismal Overwrite popup](https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/overwrite-a-web-layer.htm) Seriously, it will be fine if there were no schema changes.
 4. Discover it won't let you. Curse the fact that overwrite only works 1/2 the time.
+5. Delete Roads and republish it.
+6. For each map service in Portal that uses Roads,
+   * Open the map in Map Viewer Classic.
+   * Add the new Roads feature service.
+   * Fix up the query and popup again.
+7. Do more work on automating this step again so that you don't have to do this again.
 
-* Delete Roads and republish it. Currently it's a Map Image Layer so this won't work.
-* Open each map that used Roads.
-* Add the new Roads feature service.
-* Fix up the query and popup again.
-
-8. Do more work on automating this step again.
+The popup should look like this, it's not fancy. In fact it's generic. I might not even care if it is updated properly each time I have to do an overwrite.  
+![Roads popup](assets/Roads_popup.png "Roads popup")
 
 2022-03-16 I noticed there is now a "queryable" option when publishing
 a vector layer, but it threw an error when I tried it.
