@@ -128,6 +128,7 @@ if __name__ == "__main__":
     # Point at all the required layers.
     try:
         road_lines_layer = m.listLayers('Roads')[0]
+        trail_layer = m.listLayers('Trails')[0]
         water_lines_layer = m.listLayers('Water lines')[0]
         water_polygons_layer = m.listLayers('Water polygons')[0]
         parks_layer = m.listLayers('Parks')[0]
@@ -151,6 +152,9 @@ if __name__ == "__main__":
     print("Roads dataset:", road_lines_layer.connectionProperties['dataset'])
     print("version:", road_lines_layer.connectionProperties['connection_info']['version'])
 
+    print("Trails dataset:", trail_layer.connectionProperties['dataset'])
+    print("version:", trail_layer.connectionProperties['connection_info']['version'])
+
     print("Water dataset:", water_lines_layer.connectionProperties['dataset'])
     print("version:", water_lines_layer.connectionProperties['connection_info']['version'])
 
@@ -171,6 +175,8 @@ if __name__ == "__main__":
     layers = [
         (roads_unsplit, "roads_unsplit"), # this is used for polylines and queries
         (roads, "roads"), # this is used for labels
+
+        (trail_layer, "trails"),
 
         (water_layer, "water_lines"),
         (water_polygons_layer, "water_polygons"),
