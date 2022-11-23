@@ -12,7 +12,7 @@
 """
 import os
 from PIL import Image, ImageFont, ImageDraw
-from colors import find_dominant_colors
+from colors import find_dominant_colors # uses opencv
 
 SYSTEMFONTS = 'C:/Windows/Fonts/'
 
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     # Collect the information we'll put in a comment string.
     cwd,scriptname = os.path.split(__file__)
-    datestamp = datetime.now().strftime("%Y%m%d %H%M")
+    datestamp = datetime.now().strftime("%m/%d/%Y %H:%M")
     caption = "This is the caption"
     textmark = datestamp
     scratch_workspace = "C:\\TEMP"
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     # or from this project's test files.
     #srcdir = os.path.join("k:/webmaps/basemap/assets/")
 
-    myfont = "BROADW.TTF" # pick something from your fonts
+    myfont = "ARIAL.TTF" # pick something from your fonts
     for item in os.listdir(srcdir):
         print(item)
         imgfile = os.path.join(srcdir, item)
