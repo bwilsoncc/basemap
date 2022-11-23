@@ -94,7 +94,7 @@ if __name__ == "__main__":
         print("Can't open APRX file,", e)
         exit(-1)
 
-    layer_desc = """<p>Feature layers: Roads, Roads by Jurisdiction /></p>
+    layer_desc = """<p>Feature layers: Roads, Roads by Jurisdiction, Trails /></p>
     <p>It is in WEB MERCATOR projection.</p>"""
     project_desc = '<p>Project file: "%s"' % aprx.filePath
 
