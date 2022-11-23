@@ -153,7 +153,7 @@ In order of usage for a workflow,
         else replace existing vector tile services.
         Controlled by a table near the top of the source file.
 
-    publish_roads.py    status: sort of working, use at your own risk, see next section
+    publish_roads.py    status: working (sometimes randomly can't publish)
         Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
         This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
 
