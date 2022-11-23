@@ -66,6 +66,6 @@ if __name__ == "__main__":
 
     assert os.path.exists(Config.APRX_FILE)
 
-    pass
+    print("All tests passed.")
 
 # That's all!
