@@ -110,7 +110,7 @@ if __name__ == "__main__":
     # so that I don't have to wait for compression.
     # (But if I did any edits I need to do a reconcile/post before running this!)
     aprx = arcpy.mp.ArcGISProject(Config.APRX_FILE)
-    m = aprx.listMaps(Config.MAPNAME)[0]
+    m = aprx.listMaps(Config.DATASOURCE_MAP)[0]
     print(f"project: {Config.APRX_FILE} map: {m.name}")
 
     # Find the file geodatabase to use as the destination.
@@ -133,6 +133,7 @@ if __name__ == "__main__":
         water_polygons_layer = m.listLayers('Water polygons')[0]
         parks_layer = m.listLayers('Parks')[0]
         county_boundary_layer = m.listLayers('County Boundary')[0]
+        taxlots_layer = m.listLayers('Taxlots')[0]
     except Exception as e:
         print("Could not read all required layers.", e)
         exit(-1)
@@ -157,6 +158,9 @@ if __name__ == "__main__":
 
     print("Water dataset:", water_lines_layer.connectionProperties['dataset'])
     print("version:", water_lines_layer.connectionProperties['connection_info']['version'])
+
+    print("Taxlots dataset:", taxlots_layer.connectionProperties['dataset'])
+    print("version:", taxlots_layer.connectionProperties['connection_info']['version'])
 
     arcpy.env.workspace = "in_memory"
 
@@ -183,7 +187,9 @@ if __name__ == "__main__":
 
         (parks_layer, "parks"),
 
-        (county_boundary_layer, "county_boundary")
+        (county_boundary_layer, "county_boundary"),
+
+        (taxlots_layer, 'taxlots')
     ]
     errors = 0
     for (src,dst) in layers:
@@ -201,13 +207,6 @@ if __name__ == "__main__":
     if errors:
         print("There were errors (%d anyway), this is bad." % errors)
         exit(-1)
-
-    # Some random debug code that I could delete, 
-    # just shows the fields in "roads_unsplit".
-    dissolved = os.path.join(fgdb, 'roads_unsplit')
-    desc =  arcpy.Describe(dissolved)
-    fields = [(f.name, f.aliasName, f.baseName) for f in desc.fields]
-    print(fields)
 
     print("All done!!")
 

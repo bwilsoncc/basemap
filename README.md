@@ -5,7 +5,8 @@ Tools that help build and publish the Clatsop County base layers and maps.
 2022-09-15 Currently used with ArcGIS Pro 2.9.4 and ArcGIS Enterprise 10.9.1
 
 This started out to be an actual Esri "basemap", but it is not possible to overlay a "basemap" on top of an aerial photo. An Esri map can have only one "basemap" at a time. 
-We call it "the basemap" but it's actually three vector tile services and a map image layer used for querying. Vector services work the way I want.
+
+I still refer to it as "the basemap" but it's actually a group of services including label layers and vector layers and a Roads MIL for querying. 
 
 Since every Esri map requires a basemap (it defines the projection),
 this project also creates an "Empty basemap", which is a real basemap with a projection, but has no data in it! (The Esri grey map and set it to be 100% transparent still causes data transfers even though it's invisible.)
@@ -14,13 +15,15 @@ Raster tiles are bulky and slow and take a long time to build, vector
 tiles are fast and small but Esri won't let you query them,
 so the project uses a Roads layer for queries.
 
-In summary, we have 5 components now:
+In summary, we have these components now:
 
 1. Vector Labels - the labels only, and a county boundary line, for web maps.
-2. Roads map containing two feature layers
-3. Vector Tiles - everything, useful offline for example in Field Maps.
-4. Unlabelled Tiles - feature layers without any labels, for web maps
-5. "Empty basemap" (that's its name.)
+2. Taxlot Address Labels -
+3. Taxlot Labels - 
+4. Roads map containing two feature layers
+5. Vector Tiles - everything, useful offline for example in Field Maps.
+6. Unlabelled Tiles - feature layers without any labels, for web maps
+7. "Empty basemap" (that's its name.)
 
 | labels | features | labels and features | vector + raster |
 |--------|----------|---------------------|-----------------|
@@ -133,7 +136,7 @@ The scripts use maps in an APRX file, K:\webmaps\basemap\basemap.aprx.
 * make sure the map it uses does not have any selections
 * make sure the data sources are correct, you might want STAGING version for example.
 
-### Republish vector layers
+### Republish vector layers, including all the label layers.
 
 In order of usage for a workflow,
 
@@ -153,7 +156,7 @@ In order of usage for a workflow,
         else replace existing vector tile services.
         Controlled by a table near the top of the source file.
 
-    publish_roads.py    status: working (sometimes randomly can't publish)
+    publish_roads.py    status: working (although sometimes randomly can't publish)
         Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
         This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
 

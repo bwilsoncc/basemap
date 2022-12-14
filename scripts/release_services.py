@@ -2,7 +2,7 @@
 This script will finalize the release of the vector tile services.
 
 2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
-2022-06-22 This version does not preserve thumbnail or comments.
+2022-06-22 This version does not preserve comments.
 
 When you use "Update" from the web interface
    * the staging version will go away,
@@ -147,6 +147,16 @@ if __name__ == "__main__":
 
     else:
         services = [
+            {
+                "staged_title": "Taxlot Labels STAGED",
+                "target_title": "Taxlot Labels",
+                "offline": True,  # Allow use in an offline map
+            },
+            {
+                "staged_title": "Taxlot Address Labels STAGED",
+                "target_title": "Taxlot Address Labels",
+                "offline": True,  # Allow use in an offline map
+            },
             {  # This is the layer with labels used for Collector and Field Maps apps.
                 "staged_title": "Vector Tiles STAGED",
                 "target_title": "Vector Tiles",
@@ -180,7 +190,7 @@ if __name__ == "__main__":
         target_title = service['target_title']
         target_item = getServiceItem(gis, pc, target_title)
         if not target_item:
-            # We're doing a 'publish the first time', just rename. (This is fast.)
+            # We're doing 'publish the first time', just rename. (This is fast.)
             publishAs = target_title
             staged_item.update(item_properties={"title": target_title})
             staged_item.add_comment("Released into the wild! %s" % textmark)

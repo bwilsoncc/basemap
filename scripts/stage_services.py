@@ -74,7 +74,7 @@ def delete_item(item) -> bool:
     return False
     
 
-def upload_tile_package(portal, pkgname, pkgfile, original_thumbnail, textmark, description, overwrite=True):
+def upload_tile_package(portal, pkgname, pkgfile, thumbnail, textmark, description, overwrite=True):
     """ 
     Upload a tile package.
 
@@ -108,9 +108,8 @@ def upload_tile_package(portal, pkgname, pkgfile, original_thumbnail, textmark, 
         print("Upload did not work for %s!" % pkgname, e)
         return None
 
-    outname = os.path.join(Config.SCRATCH_WORKSPACE, 'package_thumbnail.png')
+    #outname = os.path.join(Config.SCRATCH_WORKSPACE, 'package_thumbnail.png')
     #pkg_thumbnail = mark(original_thumbnail, outname, caption='Vector Tile Package', textmark=textmark)
-    
     pkg_item.update(
         item_properties = {
             "title": snippet,
@@ -120,7 +119,7 @@ def upload_tile_package(portal, pkgname, pkgfile, original_thumbnail, textmark, 
             "licenseInfo": Config.DISCLAIMER_TEXT, 
             "description": description,
         },
-        #thumbnail = pkg_thumbnail
+        thumbnail = thumbnail
     )
     #os.unlink(pkg_thumbnail)
 
@@ -134,7 +133,7 @@ def upload_tile_package(portal, pkgname, pkgfile, original_thumbnail, textmark, 
     return pkg_item
 
 
-def stage_tile_service(portal, pkg_item, pkgname, original_thumbnail, snippet, description, overwrite=True):
+def stage_tile_service(portal, pkg_item, pkgname, thumbnail, snippet, description, overwrite=True):
     """ 
     Publish a tile package as a service.
 
@@ -167,7 +166,7 @@ def stage_tile_service(portal, pkg_item, pkgname, original_thumbnail, snippet, d
     lyr_items = pc.find_items(name=lyr_name, type=pc.VectorTileService)
     if lyr_items:
         # dearie me there is at least one service with this name so pick another
-        print("I see this is not a unique layername so I am trying to use \"%s\"." % lyr_name)
+        print("This is not a unique layername so I am trying to use \"%s\"." % lyr_name)
 
     try:
         lyr_item = pkg_item.publish(
@@ -191,9 +190,8 @@ def stage_tile_service(portal, pkg_item, pkgname, original_thumbnail, snippet, d
         show(items)
         return None
 
-    outname = os.path.join(Config.SCRATCH_WORKSPACE, 'layer_thumbnail.png')
+#    outname = os.path.join(Config.SCRATCH_WORKSPACE, 'layer_thumbnail.png')
 #    lyr_thumbnail = mark(original_thumbnail, outname, caption='Vector Tile Service', textmark=textmark)
-
     lyr_item.update(
         item_properties = {
             #"title": snippet, Title was already set in publish step.
@@ -203,7 +201,7 @@ def stage_tile_service(portal, pkg_item, pkgname, original_thumbnail, snippet, d
             "licenseInfo": Config.DISCLAIMER_TEXT, 
             "description": description,
         }, 
-#        thumbnail = lyr_thumbnail
+        thumbnail = thumbnail
     )
     #os.unlink(lyr_thumbnail)
 
@@ -255,6 +253,19 @@ if __name__ == "__main__":
     else:
         mapnames = [
             {
+                "mapname": "Taxlot Labels",
+                "description": """<p>This layer has Taxlot labels, showing the Taxlot attribute.</p>""" 
+                + layer_desc + project_desc + Config.AUTOGRAPH,
+                "thumbnail": "assets/taxlot_labels_thumbnail.png"
+            },
+            {
+                "mapname": "Taxlot Address Labels",
+                "description": """<p>This layer has Taxlot labels, showing the Situs Address attribute.</p>""" 
+                + layer_desc + project_desc + Config.AUTOGRAPH,
+                "thumbnail": "assets/taxlot_situs_address_labels_thumbnail.png"
+            },
+
+            {
                 "mapname": Config.COMBINED_MAP, 
                 "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
         It includes both the labels and the features in one vector tile layer.</p>"""
@@ -269,7 +280,8 @@ if __name__ == "__main__":
                 "mapname": Config.FEATURE_MAP, 
                 "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
                 + layer_desc + project_desc + Config.AUTOGRAPH,
-            }
+            },
+
         ]
 
     # Validate the group list
@@ -311,18 +323,21 @@ if __name__ == "__main__":
         n += 1
         progress = "%d/%d" % (n, total)
 
-        # Get the thumbnail from the map.
-        original_thumbnail = map.metadata.thumbnailUri
-        ok = os.path.exists(original_thumbnail)
+        # Get the thumbnail.
+        if "thumbnail" in item :
+            tn = item['thumbnail']
+        else :
+            tn = map.metadata.thumbnailUri
+        ok = os.path.exists(tn)
 
         print("%s Uploading tile package. %s" % (progress, pkgfile))
-        pkg_item = upload_tile_package(portal, pkgname, pkgfile, original_thumbnail, textmark, item["description"], overwrite=True)
+        pkg_item = upload_tile_package(portal, pkgname, pkgfile, tn, textmark, item["description"], overwrite=True)
         if not pkg_item: continue
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.
         res = pkg_item.share(everyone=False, org=False, groups=staging_groups, allow_members_to_edit=True)
 
         print("%s Staging service. %s" % (progress, pkgname))
-        lyr_item = stage_tile_service(portal, pkg_item, pkgname, original_thumbnail, textmark, item["description"], overwrite=True)
+        lyr_item = stage_tile_service(portal, pkg_item, pkgname, tn, textmark, item["description"], overwrite=True)
         if not lyr_item: continue
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.
         res = lyr_item.share(everyone=False, org=False, groups=staging_groups, allow_members_to_edit=True)
