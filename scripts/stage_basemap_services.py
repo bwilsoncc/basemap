@@ -34,11 +34,13 @@ def find_map(aprx, mapname):
     return maps[0]
 
 
-def build_tile_package(map, pkgname, overwrite=False):
+def build_tile_package(map, pkgname, min_zoom = Config.MIN_COUNTY_ZOOM, overwrite=False):
     """ Build a tile package. Does not overwrite by default.
 
     'map' is a map from an aprx
     'pkgname' is the name of the package (will be the filename too)
+    'min_zoom' defaults to county level, you might choose tax level
+    'overwrite' is (well you know) True or False, defaults to False
 
     Returns absolute pathname of package if a package was built or None
     (We need the path to be absolute when we do the "add" in staging.)
@@ -56,9 +58,12 @@ def build_tile_package(map, pkgname, overwrite=False):
 
     # Note, we'll update metadata later .
     # BTW, that 99999 error you're getting could be a definition query problem.
+    # RTM https://pro.arcgis.com/en/pro-app/latest/tool-reference/data-management/create-vector-tile-package.htm
+
     arcpy.management.CreateVectorTilePackage(map, pkgfile, 
-        "ONLINE", None, "INDEXED", 
-        Config.MIN_ZOOM, Config.MAX_ZOOM
+        service_type="ONLINE", tiling_scheme=None, 
+        tile_structure="FLAT", # or INDEXED
+        min_cached_scale=min_zoom, max_cached_scale=Config.MAX_ZOOM
     )
 
     return pkgfile
@@ -232,7 +237,7 @@ if __name__ == "__main__":
     pc = PortalContent(portal)
 
     try:
-        aprx = arcpy.mp.ArcGISProject(Config.APRX_FILE)
+        aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
     except Exception as e:
         print("Can't open APRX file,", e)
         exit(-1)
@@ -246,8 +251,8 @@ if __name__ == "__main__":
         mapnames = [
             {
                 "mapname": "TEST Vector Tiles", 
-                "description": """<p>This is just a test and should be deleted.</p>"""
-                + Config.AUTOGRAPH,
+                "description": """<p>This is just a test and should be deleted.</p>""" + Config.AUTOGRAPH,
+                "min_zoom": Config.MIN_COUNTY_ZOOM
             },
         ]
     else:
@@ -256,13 +261,15 @@ if __name__ == "__main__":
                 "mapname": "Taxlot Labels",
                 "description": """<p>This layer has Taxlot labels, showing the Taxlot attribute.</p>""" 
                 + layer_desc + project_desc + Config.AUTOGRAPH,
-                "thumbnail": "assets/taxlot_labels_thumbnail.png"
+                "thumbnail": "assets/taxlot_labels_thumbnail.png",
+                "min_zoom": Config.MIN_TAXLOT_ZOOM
             },
             {
                 "mapname": "Taxlot Address Labels",
                 "description": """<p>This layer has Taxlot labels, showing the Situs Address attribute.</p>""" 
                 + layer_desc + project_desc + Config.AUTOGRAPH,
-                "thumbnail": "assets/taxlot_situs_address_labels_thumbnail.png"
+                "thumbnail": "assets/taxlot_situs_address_labels_thumbnail.png",
+                "min_zoom": Config.MIN_TAXLOT_ZOOM
             },
 
             {
@@ -270,16 +277,19 @@ if __name__ == "__main__":
                 "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
         It includes both the labels and the features in one vector tile layer.</p>"""
                 + layer_desc + project_desc + Config.AUTOGRAPH,
+                "min_zoom": Config.MIN_COUNTY_ZOOM
             },
             {
                 "mapname": Config.LABEL_MAP, 
                 "description": """<p>This layer contains only labels and the county boundary. Use it as a reference layer.</p>""" 
                 + layer_desc + project_desc + Config.AUTOGRAPH,
+                "min_zoom": Config.MIN_COUNTY_ZOOM
             },
             {
                 "mapname": Config.FEATURE_MAP, 
                 "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
                 + layer_desc + project_desc + Config.AUTOGRAPH,
+                "min_zoom": Config.MIN_COUNTY_ZOOM
             },
 
         ]
@@ -306,7 +316,7 @@ if __name__ == "__main__":
             # When debugging the publish step you can change overwrite to False
             # so you don't have to wait each iteration for the package build step.
             # Don't forget to change it back!!!
-            item["pkgfile"] = build_tile_package(map, item["pkgname"], overwrite=False)
+            item["pkgfile"] = build_tile_package(map, item["pkgname"], min_zoom=item["min_zoom"], overwrite=False)
         except Exception as e:
             print("Could not generate tiles.", e)
             if e.args[0].startswith("ERROR 001117"):
