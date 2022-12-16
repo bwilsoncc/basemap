@@ -89,7 +89,7 @@ if __name__ == "__main__":
     pc = PortalContent(portal)
 
     try:
-        aprx = arcpy.mp.ArcGISProject(Config.APRX_FILE)
+        aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
     except Exception as e:
         print("Can't open APRX file,", e)
         exit(-1)

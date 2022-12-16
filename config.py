@@ -9,8 +9,12 @@ from xml.sax.handler import feature_namespace_prefixes
 class Config(object):
     """ Read environment here to create configuration data. """
 
-    workspace = os.environ.get("WORKSPACE") or "K:\\webmaps\\basemap"
-    APRX_FILE = os.path.join(workspace, "basemap.aprx")
+    BASEMAP_WORKSPACE = os.environ.get("BASEMAP_WORKSPACE") or "K:\\webmaps\\basemap"
+    BASEMAP_APRX = os.path.join(BASEMAP_WORKSPACE, "basemap.aprx")
+    
+    SERVICE_WORKSPACE = os.environ.get("SERVICE_WORKSPACE") or "K:\\webmaps\\Service_PRO"
+    SERVICE_APRX = os.path.join(SERVICE_WORKSPACE, "Service_PRO.aprx")
+    
     # The layers in this map will define our datasources in EGDB
     DATASOURCE_MAP = 'Clatsop County 2913'
     
@@ -47,15 +51,14 @@ The data is maintained by Clatsop County to support its governmental activities.
 Clatsop County is not responsible for any map errors, possible misuse, or misinterpretation."""
 
     # Scales https://www.esri.com/arcgis-blog/products/product/mapping/web-map-zoom-levels-updated/
-    MIN_ZOOM = 1155581.108577  # LOD  9
-    MAX_ZOOM = 70.5310735      # LOD 23
+    MIN_COUNTY_ZOOM = 1155581.108577  # LOD  9
+    MIN_TAXLOT_ZOOM =  144447.638572  # LOD 12
+    MAX_ZOOM        =      70.5310735 # LOD 23
 
     pass
 
 
 if __name__ == "__main__":
-
-    os.environ['WORKSPACE'] = '../'
 
     assert Config.SCRATCH_WORKSPACE
 
@@ -66,7 +69,11 @@ if __name__ == "__main__":
     assert Config.STAGING_GROUP_LIST
     assert Config.STAGING_TAG_LIST
 
-    assert os.path.exists(Config.APRX_FILE)
+    assert os.path.exists(Config.BASEMAP_WORKSPACE)
+    assert os.path.exists(Config.SERVICE_WORKSPACE)
+
+    assert os.path.exists(Config.BASEMAP_APRX)
+    assert os.path.exists(Config.SERVICE_APRX)
 
     print("All tests passed.")
 
