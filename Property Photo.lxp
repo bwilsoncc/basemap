@@ -1,0 +1,2 @@
+// PHOTO 
+"https://apps.clatsopcounty.gov/property/api/?t="+$feature["TAXLOTKEY"]

@@ -1,0 +1,35 @@
+<a href="{expression/PHOTO}" rel="nofollow" target="_blank"><img src="{expression/THUMBNAIL}"></a>
+
+<table border="0" style="width:100%">
+<tr>
+<td style="width:25%;padding:3px"><font color="#808080">Account</font></td>
+<td style="padding:3px"><a href="https://apps.clatsopcounty.gov/property/property_details/?a={ACCOUNT_ID}" rel="nofollow" target="_blank">{ACCOUNT_ID}</a><br>
+</td></tr>
+
+<tr>
+<td style="padding:3px"><font color="#808080">Taxmap</font></td>
+<td style="padding:3px"><a href="https://delta.co.clatsop.or.us/taxmaps/tp{TAXMAPNUM}.pdf" rel="nofollow" target="_blank">{SIMapTax}</a><br></td>
+</tr>
+
+<tr>
+<td style="vertical-align:top;padding:2px"><font color="#808080">Owners</font></td>
+<td style="padding:2px">{expression/OWNERS_3LINE}
+</td></tr>
+
+<tr>
+<td style="vertical-align:top;padding:3px"><font color="#808080">Mailing</font></td>
+<td style="padding:2px">{expression/MAILING_ADDRESS} <br></td></tr>
+
+<tr>
+<td style="vertical-align:top;padding:3px"><font color="#808080">Google Map</font></td>
+<td style="padding:2px">
+<a href="https://www.google.com/maps/place/{expression/GOOGLE_QUERY}" rel="nofollow" target="_blank">{expression/GOOGLE_TXT}</a>
+</td></tr>
+
+<tr>
+<td style="vertical-align:top;padding:3px"><font color="#808080">Bing Street View</font></td>
+<td style="padding:2px">
+<a href="https://bing.com/mapspreview?lvl=17&style=x&cp={expression/BING_QUERY}" target="_blank" rel="nofollow">{expression/BING_TXT}</a>
+</td></tr>
+
+</table>

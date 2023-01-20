@@ -107,17 +107,18 @@ def find_my_layers(m : arcpy._mp.Map) -> dict:
     """
     Return a dict of the layers from the map that we need.
     """
+    global basemap_workspace, service_workspace
     layers = dict()
 
     # Point at all the required layers.
     try:
-        layers['roads'] = {"layer": m.listLayers('Roads')[0], "dest": Config.BASEMAP_WORKSPACE}
-        layers['trail'] = {"layer": m.listLayers('Trails')[0], "dest": Config.BASEMAP_WORKSPACE}
-        layers['water_lines'] = {"layer": m.listLayers('Water lines')[0], "dest": Config.BASEMAP_WORKSPACE}
-        layers['water_polygons'] = {"layer": m.listLayers('Water polygons')[0], "dest": Config.BASEMAP_WORKSPACE}
-        layers['parks'] = {"layer": m.listLayers('Parks')[0], "dest": Config.BASEMAP_WORKSPACE}
-        layers['county_boundary'] = {"layer": m.listLayers('County Boundary')[0], "dest": Config.BASEMAP_WORKSPACE}
-        layers['taxlots'] = {"layer": m.listLayers('Taxlots')[0], "dest": Config.SERVICE_WORKSPACE}
+        layers['roads'] = {"layer": m.listLayers('Roads')[0], "dest": basemap_workspace}
+        layers['trail'] = {"layer": m.listLayers('Trails')[0], "dest": basemap_workspace}
+        layers['water_lines'] = {"layer": m.listLayers('Water lines')[0], "dest": basemap_workspace}
+        layers['water_polygons'] = {"layer": m.listLayers('Water polygons')[0], "dest": basemap_workspace}
+        layers['parks'] = {"layer": m.listLayers('Parks')[0], "dest": basemap_workspace}
+        layers['county_boundary'] = {"layer": m.listLayers('County Boundary')[0], "dest": basemap_workspace}
+        layers['taxlots'] = {"layer": m.listLayers('Taxlots')[0], "dest": service_workspace}
     except Exception as e:
         print("Could not read all required layers.", e)
         raise e
@@ -126,14 +127,15 @@ def find_my_layers(m : arcpy._mp.Map) -> dict:
 
 # ===============================
 if __name__ == "__main__":
-    # Find the map we are using.
-    # Normally version here is set to STAGING
-    # so that I don't have to wait for compression.
-    # (But if I did any edits I need to do a reconcile/post before running this!)
-    aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
-    m = aprx.listMaps(Config.DATASOURCE_MAP)[0]
-    print(f"Project: {Config.BASEMAP_APRX}\nMap: {m.name}\n")
-
+    basemap_aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
+    basemap_workspace = basemap_aprx.defaultGeodatabase
+    m = basemap_aprx.listMaps(Config.DATASOURCE_MAP)[0]
+    print(f"Project: {Config.BASEMAP_APRX}\nMap: {m.name}")
+  
+    service_aprx = arcpy.mp.ArcGISProject(Config.SERVICE_APRX)
+    service_workspace = service_aprx.defaultGeodatabase
+    print(f"Project: {Config.SERVICE_APRX}\n")
+  
     # List the layer names in this map.
     #listLayers(m)
 
@@ -150,22 +152,19 @@ if __name__ == "__main__":
     #roads_layer = arcpy.management.MakeFeatureLayer('roads', 'roads_layer')
         
     # Show what version is selected on each layer.
-    for (src,dst) in layers.items():
-        print(f'Dataset "{src}":', 
-            dst.connectionProperties['dataset'],
-            '  version:', dst.connectionProperties['connection_info']['version'])
-
-    # Find the file geodatabase to use as the destination.
-    fgdb = aprx.defaultGeodatabase
-    print("gdb:", fgdb)
+    for (ds, layer) in layers.items():
+        
+        print(f'Source "{ds}":', 
+            layer['layer'].connectionProperties['dataset'],
+            '  version:', layer['layer'].connectionProperties['connection_info']['version'])
 
     arcpy.env.workspace = "in_memory"
 
     # Roads that are unsplit are better for query operations.
-    (roads, roads_unsplit) = unsplit_road_lines(layers['roads'])
-    layers["roads_unsplit"] = {"layer": roads_unsplit, "dest": Config.BASEMAP_WORKSPACE} # this is used for polylines and queries
-    layers['roads'] = {"layer": roads, "dest": Config.BASEMAP_WORKSPACE} # this is used for labels
-    layers['water_lines'] = {"layer":unsplit_water_lines(layers['water_lines']), "dest": Config.BASEMAP_WORKSPACE}
+    (roads, roads_unsplit) = unsplit_road_lines(layers['roads']['layer'])
+    layers["roads_unsplit"] = {"layer": roads_unsplit, "dest": basemap_workspace} # this is used for polylines and queries
+    layers['roads'] = {"layer": roads, "dest": basemap_workspace} # this is used for labels
+    layers['water_lines'] = {"layer":unsplit_water_lines(layers['water_lines']['layer']), "dest": basemap_workspace}
 
     # Keep only features with names. No sense in having a popup when it's empty.
     # This is an idea but gives kind of bad feedback when you click and 
@@ -179,6 +178,7 @@ if __name__ == "__main__":
     for (dst,layer) in layers.items():
         try:
             dstpath = os.path.join(layer['dest'], dst)
+            src = layer['layer']    
             print("Reprojecting %s to %s" % (src, dstpath))
             arcpy.management.Project(in_dataset=src, out_dataset=dstpath, 
                 out_coor_system = Config.WM_SRS, transform_method = Config.TRANSFORMS,

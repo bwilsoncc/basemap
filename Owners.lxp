@@ -1,0 +1,6 @@
+// OWNERS_3LINE
+$feature['OWNER_LINE']
++ IIF(Trim($feature["OWNER_LL_1"])=="","",
+TextFormatting.NewLine + $feature['OWNER_LL_1'])
++ IIF(Trim($feature["OWNER_LL_2"])=="","",
+TextFormatting.NewLine + $feature['OWNER_LL_2'])

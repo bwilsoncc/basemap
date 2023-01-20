@@ -1,0 +1,6 @@
+// GOOGLE_TXT
+var addr=Trim($feature.SITUS_ADDR);
+if (addr!='') {
+  return addr;
+}
+return Round($feature.Y_COORD,4) + ',' + Round($feature.X_COORD,4)

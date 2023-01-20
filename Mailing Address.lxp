@@ -1,0 +1,6 @@
+// MAILING_ADDRESS
+// I can ignore PO BOX and UNIT_NUMBE because they are redundant
+IIF(Trim($feature["STREET_ADD"])=="", "", 
+$feature['STREET_ADD'] + TextFormatting.NewLine)
++ IIF(Trim($feature["CITY"])=="","", $feature['CITY'] + ', ') 
++ $feature['STATE'] + ' ' + $feature['ZIP_CODE']

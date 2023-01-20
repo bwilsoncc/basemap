@@ -9,14 +9,17 @@ from xml.sax.handler import feature_namespace_prefixes
 class Config(object):
     """ Read environment here to create configuration data. """
 
-    BASEMAP_WORKSPACE = os.environ.get("BASEMAP_WORKSPACE") or "K:\\webmaps\\basemap"
-    BASEMAP_APRX = os.path.join(BASEMAP_WORKSPACE, "basemap.aprx")
+    BASEMAP_APRX = os.environ.get("BASEMAP_APRX") or "k:\\webmaps\\basemap\\basemap.aprx"
+    TAXMAP_APRX = os.environ.get("TAXMAP_APRX") or "k:\\webmaps\\TaxMaps\\TaxMaps.aprx"
+    SERVICE_APRX = os.environ.get("SERVICE_APRX") or "k:\\webmaps\\Service_PRO\\Service_PRO.aprx"
+    PORTAL_URL = os.environ.get('PORTAL_URL') or "https://delta.co.clatsop.or.us/portal"
+    SERVER_URL = os.environ.get('SERVER_URL') or "https://delta.co.clatsop.or.us/server"
     
-    SERVICE_WORKSPACE = os.environ.get("SERVICE_WORKSPACE") or "K:\\webmaps\\Service_PRO"
-    SERVICE_APRX = os.path.join(SERVICE_WORKSPACE, "Service_PRO.aprx")
-    
-    # The layers in this map will define our datasources in EGDB
+    # The layers in this BASEMAP map will define our datasources in EGDB
     DATASOURCE_MAP = 'Clatsop County 2913'
+
+    # This will be used to overwrite the existing MIL.
+    TAXLOTS_MAP = 'Taxlots'
     
     LABEL_MAP = "Vector Tile Labels"
     FEATURE_MAP = "Unlabeled Vector Tiles"
@@ -35,16 +38,13 @@ class Config(object):
     if not os.path.exists(SCRATCH_WORKSPACE):
         SCRATCH_WORKSPACE = os.environ["TEMP"]
 
-    PORTAL_URL = os.environ.get('PORTAL_URL')
     PORTAL_USER = os.environ.get('PORTAL_USER')
     PORTAL_PASSWORD = os.environ.get('PORTAL_PASSWORD')
-
-    SERVER_URL = os.environ.get('SERVER_URL')
 
     STAGING_GROUP_LIST = ['GIS Team']
     RELEASE_GROUP_LIST = ['GIS Team']
     STAGING_TAG_LIST = ['"Clatsop County"']
-    CREDITS = 'County of Clatsop, Oregon'
+    CREDITS = 'Clatsop County GIS Services'
 
     DISCLAIMER_TEXT = """Disclaimer: This data was produced using Clatsop County GIS data. 
 The data is maintained by Clatsop County to support its governmental activities. 
@@ -69,10 +69,8 @@ if __name__ == "__main__":
     assert Config.STAGING_GROUP_LIST
     assert Config.STAGING_TAG_LIST
 
-    assert os.path.exists(Config.BASEMAP_WORKSPACE)
-    assert os.path.exists(Config.SERVICE_WORKSPACE)
-
     assert os.path.exists(Config.BASEMAP_APRX)
+    assert os.path.exists(Config.TAXMAP_APRX)
     assert os.path.exists(Config.SERVICE_APRX)
 
     print("All tests passed.")

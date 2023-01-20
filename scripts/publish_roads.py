@@ -22,7 +22,7 @@ def find_map(aprx, mapname):
     return maps[0]
 
 
-def create_service_definition(map: object, item: dict, folder: str, sd_file: str):
+def create_service_definition(map: object, item: dict, sd_file: str):
     """
     Create an sd file named "sd_file".
     """
@@ -45,7 +45,7 @@ def create_service_definition(map: object, item: dict, folder: str, sd_file: str
     sddraft.overwriteExistingService = True # WELL THIS FAILS SPECTACULARLY
 
     # The draft file is an XML file.
-    sddraft_file = os.path.join(Config.SCRATCH_WORKSPACE, pkgname + ".sddraft")
+    sddraft_file = os.path.join(Config.SCRATCH_WORKSPACE, item["pkgname"] + ".sddraft")
 
     sddraft.exportToSDDraft(sddraft_file)
 
@@ -107,7 +107,8 @@ if __name__ == "__main__":
             + project_desc
             + "<br />" + Config.AUTOGRAPH,
             #"folder": "TESTING_Brian", "pkgname": "DELETEME_" + Config.ROAD_MAP.replace(" ", "_"), # TEST RUN
-            "folder": "Public Works", "pkgname": Config.ROAD_MAP.replace(" ", "_"), # SHOWTIME!!!!
+            "folder": "Public Works", 
+            "pkgname": Config.ROAD_MAP.replace(" ", "_"), # SHOWTIME!!!!
         }
     ]
 
@@ -119,7 +120,6 @@ if __name__ == "__main__":
     n = 0
     for item in mapnames:
         mapname = item["mapname"]
-        pkgname = item["pkgname"]
         n += 1
         progress = "%d/%d" % (n, total)
 
@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
         # https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/automate-sharing-web-layers.htm
 
-        sd_file = os.path.join(Config.SCRATCH_WORKSPACE, pkgname + ".sd")
+        sd_file = os.path.join(Config.SCRATCH_WORKSPACE, item["pkgname"] + ".sd")
         if arcpy.Exists(sd_file):
             print(f"Using existing file \"{sd_file}\".")
         else:
@@ -138,14 +138,14 @@ if __name__ == "__main__":
             
             # 1. Create a service definition draft
             # 2. Stage the service (zip)
-            create_service_definition(map, item, item["folder"], sd_file)
+            create_service_definition(map, item, sd_file)
 
         # 3. Upload the service definition
         # THIS WILL DESTROY AN EXISTING SERVICE
         #  * First I should try to update an existing definition.
         #  * If that fails then I create a new one...
 
-        print('Uploading definition using "%s" to "%s" folder.' % (pkgname, item["folder"]))
+        print('Uploading definition using "%s" to "%s" folder.' % (item["pkgname"], item["folder"]))
 
         # Upload the service definition to SERVER
         # In theory everything needed to publish the service is already in the SD file.
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         # Add a comment to the service
 
         gis = GIS(Config.PORTAL_URL, username=Config.PORTAL_USER, password=Config.PORTAL_PASSWORD)            
-        target_item = getServiceItem(gis, PortalContent(gis), pkgname)
+        target_item = getServiceItem(gis, PortalContent(gis), item["pkgname"])
         target_item.add_comment("Updated %s" % textmark)
         show(target_item)
 

@@ -1,0 +1,8 @@
+// GOOGLE_QUERY
+var addr=Trim($feature.SITUS_ADDR);
+var city=Trim($feature.SITUS_CITY);
+if (addr!='' && city!='') {
+  var situs=addr + ', ' + city + ', OR';
+  return Replace(situs,' ','+');
+}
+return Round($feature.Y_COORD,4) + ',' + Round($feature.X_COORD,4)

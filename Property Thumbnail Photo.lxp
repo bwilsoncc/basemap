@@ -1,0 +1,3 @@
+// THUMBNAIL
+Property_Photo_Thumbnail
+"https://apps.clatsopcounty.gov/property/api/?tn=1&t="+$feature["TAXLOTKEY"]

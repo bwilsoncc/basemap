@@ -1,0 +1,4 @@
+// BING_TXT
+var x=Round($feature.X_COORD,4);
+var y=Round($feature.Y_COORD,4);
+return y + ',' + x; 
