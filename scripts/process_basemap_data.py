@@ -1,5 +1,5 @@
 """
-process_data.py
+process_basemap_data.py
 
 2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
 
@@ -12,44 +12,8 @@ and throw away the symbology you spent 3 days working on. You will shed tears.
 """
 import os
 import arcpy
-from utils import listLayers
+from utils import listLayers, unsplit_lines
 from config import Config
-
-cwd = os.getcwd()
-arcpy.env.overwriteOutput = True
-
-def unsplit_lines(src_layer, dissolve_attribute_list=None, attributes=None):
-    """
-    Copy then unsplit (like 'dissolve' but for line features)
-
-    Doing copy because this feature class won't go through otherwise due to errors about participating in a topology maybe
-
-    Unsplitting has the side effect of getting rid of attributes;
-    list the ones you want to preserve in 'attributes'
-    """
-    assert(src_layer.isFeatureLayer)
-    scratch = (src_layer.name + "_2913").replace(' ', '_')
-    try:
-        arcpy.management.CopyFeatures(src_layer, scratch)
-        print("\"%s\" feature count = %s" % (scratch, arcpy.management.GetCount(scratch)))
-    except Exception as e:
-        print("Download of \"%s\" failed." % src_layer.name, e)
-    assert(arcpy.Exists(scratch))
-
-    print("Unsplitting %s." % scratch)
-    dissolved = scratch + "_unsplit"
-    arcpy.management.UnsplitLine(scratch, dissolved, 
-        dissolve_attribute_list, # dissolve on these -- the attributes will be preserved
-        attributes # list other attributes that you want to preserve here
-    )
-    print("Unsplit feature count =", arcpy.management.GetCount(dissolved))
-
-    # Unsplit changed all the attributes, now change them back!
-    for old_name, stat_field in attributes:
-        new_name = stat_field + "_" + old_name
-        results = arcpy.management.AlterField(in_table= dissolved, field= new_name, new_field_name= old_name.lower(), new_field_alias= old_name)
-
-    return (scratch, dissolved)
 
 
 def unsplit_road_lines(road_lines_layer):
@@ -103,43 +67,46 @@ def unsplit_water_lines(water_lines_layer):
     #    exit(-1)
     return water_layer
 
-def find_my_layers(m : arcpy._mp.Map) -> dict:
+
+def find_my_layers(m : arcpy._mp.Map, workspace: str) -> dict:
     """
     Return a dict of the layers from the map that we need.
     """
-    global basemap_workspace, service_workspace
     layers = dict()
 
     # Point at all the required layers.
     try:
-        layers['roads'] = {"layer": m.listLayers('Roads')[0], "dest": basemap_workspace}
-        layers['trail'] = {"layer": m.listLayers('Trails')[0], "dest": basemap_workspace}
-        layers['water_lines'] = {"layer": m.listLayers('Water lines')[0], "dest": basemap_workspace}
-        layers['water_polygons'] = {"layer": m.listLayers('Water polygons')[0], "dest": basemap_workspace}
-        layers['parks'] = {"layer": m.listLayers('Parks')[0], "dest": basemap_workspace}
-        layers['county_boundary'] = {"layer": m.listLayers('County Boundary')[0], "dest": basemap_workspace}
-        layers['taxlots'] = {"layer": m.listLayers('Taxlots')[0], "dest": service_workspace}
+        # Basemaps data
+        layers['roads'] = {"layer": m.listLayers('Roads')[0], "dest": workspace}
+        layers['trail'] = {"layer": m.listLayers('Trails')[0], "dest": workspace}
+        layers['water_lines'] = {"layer": m.listLayers('Water lines')[0], "dest": workspace}
+        layers['water_polygons'] = {"layer": m.listLayers('Water polygons')[0], "dest": workspace}
+        layers['parks'] = {"layer": m.listLayers('Parks')[0], "dest": workspace}
+        layers['county_boundary'] = {"layer": m.listLayers('County Boundary')[0], "dest": workspace}
+
     except Exception as e:
         print("Could not read all required layers.", e)
         raise e
 
     return layers
 
+
 # ===============================
 if __name__ == "__main__":
+
+    cwd = os.getcwd()
+    arcpy.env.overwriteOutput = True
+
     basemap_aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
     basemap_workspace = basemap_aprx.defaultGeodatabase
+    maps = basemap_aprx.listMaps()
     m = basemap_aprx.listMaps(Config.DATASOURCE_MAP)[0]
-    print(f"Project: {Config.BASEMAP_APRX}\nMap: {m.name}")
+    print(f"Project: {Config.BASEMAP_APRX} Map: \"{m.name}\"")
   
-    service_aprx = arcpy.mp.ArcGISProject(Config.SERVICE_APRX)
-    service_workspace = service_aprx.defaultGeodatabase
-    print(f"Project: {Config.SERVICE_APRX}\n")
-  
-    # List the layer names in this map.
+        # List the layer names in this map.
     #listLayers(m)
 
-    layers = find_my_layers(m)
+    layers = find_my_layers(m, basemap_workspace)
 
     # I tried to set the version I wanted to read here and failed
     # every way possible. 

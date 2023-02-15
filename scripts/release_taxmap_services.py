@@ -1,5 +1,5 @@
 """
-This script will finalize the release of the vector tile services.
+This script will finalize the release of the taxmap services.
 
 2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
 2022-06-22 This version does not preserve comments.
@@ -18,10 +18,9 @@ so instead I'm doing it all correctly here. Like this.
 import os, sys
 from arcgis.gis import GIS
 from datetime import datetime
-from portal import PortalContent, show
+from portal import PortalContent
 from config import Config
 sys.path.insert(0,'')
-from utils import getServiceItem
 
 TEST = True # If set true, use a bogus service so that it does not break all our the live maps.
 TEST = False # Okay, here we go!
@@ -71,8 +70,8 @@ def replace_service(staged_item, target_item, archive_name) -> None:
 
     return
 
-def update_sharing(gis: object, pc: object, service_title: str, release_groups: object) -> None:
-    service_item = getServiceItem(gis, pc, service_title)
+def update_sharing(gis: object, pc: PortalContent, service_title: str, release_groups: object) -> None:
+    service_item = pc.getServiceItem(service_title)
     if not service_item:
         return
 
@@ -86,21 +85,6 @@ def update_sharing(gis: object, pc: object, service_title: str, release_groups: 
     except Exception as e:
         print("Sharing permissions update failed. %s" % e)
 
-    return None
-
-def deprecate_service(archive_name) -> None:
-    """
-    Change the status on the replaced service to "deprecated".
-    """    
-    archive_ids = pc.find_ids(name=archive_name, type=pc.VectorTileService)
-    if len(archive_ids) == 1:
-        archive_item = gis.content.get(archive_ids[0])
-        archive_item.content_status = "deprecated"
-        archive_item.protect(enable = False)
-    else:
-        print("WARNING: I can't find an archive named \"%s\"." % archive_name)
-        archive_items = pc.find_items(name=archive_name, type=pc.VectorTileService)
-        show(archive_items)
     return
 
 
@@ -110,10 +94,10 @@ if __name__ == "__main__":
     pc = PortalContent(gis)
 
     # Validate the group list.
-    release_groups = pc.get_groups(Config.RELEASE_GROUP_LIST)
+    release_groups = pc.getGroups(Config.RELEASE_GROUP_LIST)
 
     if TEST:
-        delete_me = getServiceItem(gis, pc, "TEST Vector Tiles")
+        delete_me = pc.getServiceItem("TEST Vector Tiles")
         if delete_me:
             print("WARNING, for a complete test, service should not already exist. Up to you what you are testing...")
 
@@ -156,21 +140,6 @@ if __name__ == "__main__":
                 "staged_title": "Taxlot Address Labels STAGED",
                 "target_title": "Taxlot Address Labels",
                 "offline": True,  # Allow use in an offline map
-            },
-            {  # This is the layer with labels used for Collector and Field Maps apps.
-                "staged_title": "Vector Tiles STAGED",
-                "target_title": "Vector Tiles",
-                "offline": True,  # Allow use in an offline map
-            },
-            {  # This is the layer with only the labels
-                "staged_title": "Vector Tile Labels STAGED",
-                "target_title": "Vector Tile Labels",
-                "offline": True,  # Allow use in an offline map
-            },
-            {  # This is the layer with only the shapes
-                "staged_title": "Unlabeled Vector Tiles STAGED",
-                "target_title": "Unlabeled Vector Tiles",
-                "offline": True,  # Allow use in an offline map
             }
         ]
 
@@ -179,16 +148,15 @@ if __name__ == "__main__":
     textmark  = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials # more readable
 
     for service in services:
-        print("============")
         print(service)
 
         staged_title = service['staged_title']
-        staged_item = getServiceItem(gis, pc, staged_title)
+        staged_item = pc.getServiceItem(staged_title)
         if not staged_item:
             continue
 
         target_title = service['target_title']
-        target_item = getServiceItem(gis, pc, target_title)
+        target_item = pc.getServiceItem(target_title)
         if not target_item:
             # We're doing 'publish the first time', just rename. (This is fast.)
             publishAs = target_title
@@ -216,10 +184,12 @@ if __name__ == "__main__":
             # We're doing a replacement. This takes a bit of time.
             archive_name = 'ARCHIVED_' + target_item.name + '_' + datestamp.replace(' ','_')
             replace_service(staged_item, target_item, archive_name)
-            target_item.add_comment("Released into the wild! %s" % textmark)
-            deprecate_service(archive_name)
+            try:
+                target_item.add_comment("Released into the wild! %s" % textmark)
+                pc.deprecateService(archive_name)
+            except Exception as e:
+                print("WARNING", e)
+                pass
+        pc.UpdateSharing(target_title, release_groups)
 
-        update_sharing(gis, pc, target_title, release_groups)
-
-print("============")
 print("That's all!")

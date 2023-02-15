@@ -9,14 +9,23 @@ from xml.sax.handler import feature_namespace_prefixes
 class Config(object):
     """ Read environment here to create configuration data. """
 
+    # Use absolute path for APRX, because it will be published in Server properties for the service.
     BASEMAP_APRX = os.environ.get("BASEMAP_APRX") or "k:\\webmaps\\basemap\\basemap.aprx"
-    TAXMAP_APRX = os.environ.get("TAXMAP_APRX") or "k:\\webmaps\\TaxMaps\\TaxMaps.aprx"
-    SERVICE_APRX = os.environ.get("SERVICE_APRX") or "k:\\webmaps\\Service_PRO\\Service_PRO.aprx"
+#    TAXMAP_APRX = os.environ.get("TAXMAP_APRX") or "k:\\webmaps\\TaxMaps\\TaxMaps.aprx"
+    TAXMAP_APRX = os.environ.get("TAXMAP_APRX") or os.path.abspath("Taxmaps\\TaxMaps.aprx")
+
+    TAXLOTS_LYRX = os.environ.get("TAXLOT_LYRX") or "Taxmaps\\Taxlots.lyrx"
     PORTAL_URL = os.environ.get('PORTAL_URL') or "https://delta.co.clatsop.or.us/portal"
-    SERVER_URL = os.environ.get('SERVER_URL') or "https://delta.co.clatsop.or.us/server"
+
+    CHAT_USER="bwilson"
+    CHAT_PASSWORD = os.environ.get("PORTAL_PASSWORD")
+    CHAT_SERVER = "https://chat.clatsopcounty.gov" 
+
+    # This is a server connection file set up with enough permission to write to the ArcGIS Server.
+    SERVER_AGS = os.environ.get('SERVER_AGS') or "server_on_delta.ags"
     
     # The layers in this BASEMAP map will define our datasources in EGDB
-    DATASOURCE_MAP = 'Clatsop County 2913'
+    DATASOURCE_MAP = '2913 sources for services'
 
     # This will be used to overwrite the existing MIL.
     TAXLOTS_MAP = 'Taxlots'
@@ -32,7 +41,7 @@ class Config(object):
     TRANSFORMS = ["NAD_1983_HARN_To_WGS_1984_2"]
 
     # This gets tagged onto the service description so we can figure out how to do it again in 3 months.
-    AUTOGRAPH = "<a target=\"_github\" href=\"https://github.com/bwilsoncc/basemap#readme\">How to update it.</a></p>"
+    DOC_LINK = "<a target=\"_github\" href=\"https://github.com/bwilsoncc/basemap#readme\">How to update it.</a></p>"
 
     SCRATCH_WORKSPACE = "C:\TEMP"
     if not os.path.exists(SCRATCH_WORKSPACE):
@@ -60,18 +69,19 @@ Clatsop County is not responsible for any map errors, possible misuse, or misint
 
 if __name__ == "__main__":
 
-    assert Config.SCRATCH_WORKSPACE
-
     assert Config.PORTAL_URL
     assert Config.PORTAL_USER
     assert Config.PORTAL_PASSWORD
 
+    assert os.path.exists(Config.SERVER_AGS)
+    assert Config.SCRATCH_WORKSPACE
+    
     assert Config.STAGING_GROUP_LIST
     assert Config.STAGING_TAG_LIST
 
     assert os.path.exists(Config.BASEMAP_APRX)
     assert os.path.exists(Config.TAXMAP_APRX)
-    assert os.path.exists(Config.SERVICE_APRX)
+    assert os.path.exists(Config.TAXLOTS_LYRX)
 
     print("All tests passed.")
 

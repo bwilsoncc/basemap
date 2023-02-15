@@ -5,24 +5,23 @@ Tools that help build and publish the Clatsop County base layers and maps.
 2022-12-15 Added support for taxmaps incl taxlots and annotation
 2022-09-15 Currently used with ArcGIS Pro 2.9.4 and ArcGIS Enterprise 10.9.1
 
-This started out to be an actual Esri "basemap", but it is not possible to overlay a "basemap" on top of an aerial photo. An Esri map can have only one "basemap" at a time. 
-
-I still refer to it as "the basemap" but it's actually a group of services including label layers and vector layers and a Roads MIL for querying. 
+I refer to this as "the basemap" but it's actually a group of services including queryable layers and label layers and vector layers. 
 
 Since every Esri map requires a basemap (it defines the projection),
-this project also creates an "Empty basemap", which is a real basemap with a projection, but has no data in it! (The Esri grey map and set it to be 100% transparent still causes data transfers even though it's invisible.)
+this project also creates an "Empty basemap", which is a real basemap with a projection, but has no data in it. This makes it load fast.
+(The Esri grey map and set it to be 100% transparent still causes data transfers even though it's invisible.)
 
-Raster tiles are bulky and slow and take a long time to build, vector
-tiles are fast and small but Esri won't let you query them,
-so the project uses a Roads layer for queries.
+Raster tiles are bulky and slow and take a long time to build,
+vector tiles are fast and small but Esri won't let you query them,
+so we use feature layers for queries and sometimes for labels.
 
 In summary, we have these components now:
 
 For the basemap, 
-1. Vector Labels - the labels only, and a county boundary line, for web maps.
-2. Roads map containing two feature layers
-3. Vector Tiles - everything, useful offline for example in Field Maps.
-4. Unlabelled Tiles - feature layers without any labels, for web maps
+1. "Vector Labels" - the labels only, and a county boundary line, for web maps.
+2. "Roads", containing three feature layers
+3. "Vector Tiles" - everything, useful offline for example in Field Maps.
+4. "Unlabeled Tiles" - feature layers without any labels, for web maps
 5. "Empty basemap" (that's its name.)
 
 For taxmaps,
@@ -43,7 +42,8 @@ In Field Maps, every map has to have a "real basemap" but I don't want to incur 
 
 ## Prerequisites
 
-First time around,clone the standard Python environment then add things to it. If you upgrade Pro then you can upgrade the environment
+First time around, clone the standard Python environment then add things to it. 
+If you upgrade Pro then you can upgrade the environment
 but it's probably faster to nuke it and start over.
 
 ```bash
@@ -135,54 +135,58 @@ When building the empty basemap,
 
 ## The workflow with these scripts
 
-scripts/        Scripts for building basemaps and publishing them
+__scripts/__        Scripts for building basemaps and publishing them
 
-The scripts use maps in an APRX file, K:\webmaps\basemap\basemap.aprx.
+The scripts use maps in APRX files, 
+K:\webmaps\basemap\basemap.aprx and K:\webmaps\basemap\taxmap.aprx.
 
-* most settings are in config.py; .env has some secrets in it
-* make sure the map it uses does not have any selections
-* make sure the data sources are correct, you might want STAGING version for example.
+1. Most settings are in config.py; .env has some secrets in it.
+2. Make sure the map it uses does not have any features selected.
+3. Make sure the data sources are correct, you likely will want the STAGING version for example instead of your personal version or the default.
 
 ### Republish vector layers, including all the label layers.
 
 In order of usage for a workflow,
 
-    process_data.py     status: working
-        NOTE, this scripts is used to import data for both the basemap and taxmap services
-        Make sure you pull the version you want, typically either from Default or Staging.
-        Downloads data from the Enterprise GDB to a local FGDB and reprojects it to Web Mercator.
-        Processes copied data; unsplits roads and water lines and removes unwanted attributes.
+* **process_basemap_data.py**     status: working  
+This script is used to import data for the basemap services
+Make sure you pull the version you want, typically either from Default or Staging.  
+1. Downloads data from the Enterprise GDB to a local FGDB and reprojects it to Web Mercator.  
+2. Processes copied data; unsplits roads and water lines and removes unwanted attributes.
 
-    stage_basemap_services.py   status: working
-        Uses basemap.aprx file to 
-        process feature classes into vector tile maps 
-        and then publishes them on the portal.
-        They always get named with timestamps so no existing services are ever injured (aka overwritten).
+* **process_taxmap_data.py**     status: IN DEVELOPMENT, does not run  
+Processes data for taxmaps, similar to process_basemap_data.py
 
-    stage_taxmap_services:  status: NEW
-        Uses ServicePRO.aprx to do the same things for taxmap services.
+* **stage_basemap_services.py**   status: working  
+Uses basemap.aprx file to process feature classes into vector tile maps 
+and then publishes them on the portal.
+They always get named with timestamp appended; no existing services are overwritten.
 
-    release_basemap_services.py  status: working
-        If a tile service does not exist, create it
-        else replace existing vector tile services.
-        Controlled by a table near the top of the source file.
+* **stage_taxmap_services**:  status: IN DEVELOPMENT, don't do this yet  
+Uses ServicePRO.aprx to do the same things for taxmap services.
 
-    release_taxmap_services.py  status: working
-        If a tile service does not exist, create it
-        else replace existing vector tile services.
-        Controlled by a table near the top of the source file.
+* **release_basemap_services.py**  status: working  
+__N.B. -- QA/QC the staged services before running this.__  
+1. If a tile service does not exist, create it
+else replace existing vector tile services.
+2. Controlled by a table near the top of the source file.
 
-    publish_roads.py    status: working (although sometimes randomly can't publish)
-        Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
-        This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
+* **release_taxmap_services.py**  status: IN DEVELOPMENT  
+__N.B. -- QA/QC the staged services before running this.__  
+Similar to release_basemap_services.py
 
-    republish_raster_tiles.py   status: ABANDONED
-        This was to be used for republishing raster tiles, just here for cold storage.
-        TODO Read the code and update this note!!
+* **publish_roads.py**    status: working (sometimes publish fails for no apparent reason)
+Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
+This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
+
+* **republish_raster_tiles.py**   status: **ABANDONED**  
+This was to be used for republishing raster tiles, just here for cold storage.
 
 ### Republish Roads feature layer
 
-1. First run "process_data.py", that will import current data into the local FGDB used here.
+These days "publish_roads.py" is working well, so I think this section is just whining about the bad old days.
+
+1. Run "process_basemap_data.py", to import current data into the local FGDB used here.
 2. Open the basemap project, (k:\webmaps\basemap\basemap.aprx) open the Roads map.
 3. Use Share->Web Layer->Overwrite Web Layer (destination is in my folder "Public Works")
 Read about the [dismal Overwrite popup](https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/overwrite-a-web-layer.htm) Seriously, it will be fine if there were no schema changes.
@@ -194,26 +198,23 @@ Read about the [dismal Overwrite popup](https://pro.arcgis.com/en/pro-app/2.9/he
    * Fix up the query and popup again.
 7. Do more work on automating this step again so that you don't have to do this again.
 
-The popup should look like this, it's not fancy. In fact it's generic. I might not even care if it is updated properly each time I have to do an overwrite.  
+I have upgraded the popups for many services now by editing them in the APRX maps instead of doing it in the Portal map viewer.
+
+Here is a screenshot of the Roads popup. It's maintained in the APRX
+so the dire warning about it changing is no longer relevant. It updates at every publish.
+
 ![Roads popup](assets/Roads_popup.png "Roads popup")
 
-2022-03-16 I noticed there is now a "queryable" option when publishing
-a vector layer, but it threw an error when I tried it.
+__2022-03-16__ There is now a "queryable" option when publishing
+a vector layer, but it threw an error when I tried it. Esri says they are not
+interested in solving this problem. 
 
 ## Some additional files
 
-    basemap.aprx       ArcGIS Pro project file
+* **basemap.aprx**       ArcGIS Pro project file
+* **Roads.lyrx**         roads feature class from the local GDB, symbolized for a vector tile map
+* **Roads_labels.lyrx**  labels for roads
+* **scripts/watermark.py**   Prints text onto a thumbnail image, not using this right now. Thumbnails are cute but putting text on one is a hack to fix the deficiencies in the Portal UI. I am not using this right now but it's referenced in the other scripts so I am leaving it here. 
+* **scripts/colors.py**   Finds the dominant color in an image, used in watermark.py.
+* **scripts/portal.py**   PortalContent class, sadly forgotten work-in-progress 
 
-    Roads.lyrx         roads feature class from the local GDB, symbolized for a vector tile map
-
-    Roads_labels.lyrx  labels for roads
-
-    scripts/watermark.py   Prints text onto a thumbnail image, not using this right now. Thumbnails are cute but putting text on one is a hack to fix the deficiencies in the Portal UI. I am not using this right now but it's referenced in the other scripts so I am leaving it here. 
-
-    scripts/colors.py   Finds the dominant color in an image, used in watermark.py.
-
-    scripts/portal.py   PortalContent class, sadly forgotten work-in-progress 
-
-```
-
-be645e399add4c4db2bbe36ba754bb30

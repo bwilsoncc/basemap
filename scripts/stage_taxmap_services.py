@@ -21,7 +21,7 @@ import arcpy
 from arcgis.gis import GIS
 from datetime import datetime
 from config import Config
-from scripts.portal import PortalContent, show
+from scripts.portal import PortalContent
 
 TEST = True # Generate a test service only.
 TEST = False # Generate real services.
@@ -92,7 +92,7 @@ def upload_tile_package(portal, pkgname, pkgfile, thumbnail, textmark, descripti
     snippet = ("%s (%s)" % (pkgname, textmark)).replace('_', ' ')
 
     # 2021-10-15 I've had this fail, I worked around it by deleting manually. 
-    existing_item = pc.find_item(name=pkgname, type=pc.VectorTilePackage)
+    existing_item = pc.findItem(name=pkgname, type=pc.VectorTilePackage)
     if existing_item:
         if overwrite:
             delete_item(existing_item)
@@ -154,7 +154,7 @@ def stage_tile_service(portal, pkg_item, pkgname, thumbnail, snippet, descriptio
     # "overwrite = True" always seems to break here no matter what.
     
     lyr_title = (pkgname + ' STAGED').replace('_',' ')
-    existing_item = pc.find_item(title=lyr_title, type=pc.VectorTileService) 
+    existing_item = pc.findItem(title=lyr_title, type=pc.VectorTileService) 
     if existing_item:
         if overwrite:
             if existing_item.content_status == 'org_authoritative':
@@ -168,7 +168,7 @@ def stage_tile_service(portal, pkg_item, pkgname, thumbnail, snippet, descriptio
 
 #    lyr_name = pkgname # "Vector_Tiles" was failing failing failing!
     lyr_name = (pkgname + '_' + datestamp).replace(' ', '_')
-    lyr_items = pc.find_items(name=lyr_name, type=pc.VectorTileService)
+    lyr_items = pc.findItems(name=lyr_name, type=pc.VectorTileService)
     if lyr_items:
         # dearie me there is at least one service with this name so pick another
         print("This is not a unique layername so I am trying to use \"%s\"." % lyr_name)
@@ -189,10 +189,10 @@ def stage_tile_service(portal, pkg_item, pkgname, thumbnail, snippet, descriptio
     except Exception as e:
         print("Staging failed!", e)
         # "Service name 'Vector_Tiles' already exists for '0123456789'"
-        items = pc.find_items(name=lyr_name) 
-        show(items)
-        items = pc.find_items(title=lyr_title) 
-        show(items)
+        items = pc.findItems(name=lyr_name) 
+        PortalContent.show(items)
+        items = pc.findItems(title=lyr_title) 
+        PortalContent.show(items)
         return None
 
 #    outname = os.path.join(Config.SCRATCH_WORKSPACE, 'layer_thumbnail.png')
@@ -257,6 +257,7 @@ if __name__ == "__main__":
         ]
     else:
         mapnames = [
+            # This does not work as a vector service, because it always puts the label in the middle of the poly.
             {
                 "mapname": "Taxlot Labels",
                 "description": """<p>This layer has Taxlot labels, showing the Taxlot attribute.</p>""" 
@@ -271,31 +272,10 @@ if __name__ == "__main__":
                 "thumbnail": "assets/taxlot_situs_address_labels_thumbnail.png",
                 "min_zoom": Config.MIN_TAXLOT_ZOOM
             },
-
-            {
-                "mapname": Config.COMBINED_MAP, 
-                "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
-        It includes both the labels and the features in one vector tile layer.</p>"""
-                + layer_desc + project_desc + Config.AUTOGRAPH,
-                "min_zoom": Config.MIN_COUNTY_ZOOM
-            },
-            {
-                "mapname": Config.LABEL_MAP, 
-                "description": """<p>This layer contains only labels and the county boundary. Use it as a reference layer.</p>""" 
-                + layer_desc + project_desc + Config.AUTOGRAPH,
-                "min_zoom": Config.MIN_COUNTY_ZOOM
-            },
-            {
-                "mapname": Config.FEATURE_MAP, 
-                "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
-                + layer_desc + project_desc + Config.AUTOGRAPH,
-                "min_zoom": Config.MIN_COUNTY_ZOOM
-            },
-
         ]
 
     # Validate the group list
-    staging_groups = pc.get_groups(Config.STAGING_GROUP_LIST)
+    staging_groups = pc.getGroups(Config.STAGING_GROUP_LIST)
     total = len(mapnames)
 
     print("Building tile package(s).")

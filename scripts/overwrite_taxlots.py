@@ -9,29 +9,39 @@ from datetime import datetime
 import arcpy
 from arcgis.gis import GIS
 from config import Config
-from scripts.portal import PortalContent, show
+from scripts.portal import PortalContent
 sys.path.insert(0,'')
-from utils import listLayers, getServiceItem
 
 cwd = os.getcwd()
 arcpy.env.overwriteOutput = True
 
-def rebuild_taxlots(src : str, dst_path: str, dst_name : str) -> None:
+
+def listLayers(m):
+    # List the layer names in the map.
+    for layer in m.listLayers():
+        print("layer:", layer.name)
+        cim = layer.getDefinition('V2')
+        pup = cim.popupInfo
+        if pup:
+            print("popup title: ", pup.title)
+#            print(pup.showPopups)
+            for ex in pup.expressionInfos:
+                print(f'expression/{ex.name} = """{ex.expression}"""')
+
+    return
+
+
+def import_taxlots(src : str, dst: str) -> None:
     errors = 0
 
     # Ancient of Days takes so LONG to delete one field at a time
     # even when working from a local FGDB in SSD. Oh well. Normally I don't sit and watch.
     # I tried deleting a list of fields but that failed.
-    # I tried using a field map but that failed.
-
-    scratch_db = os.path.join(Config.SCRATCH_WORKSPACE, 'scratch.gdb')
-    if not arcpy.Exists(scratch_db):
-        arcpy.management.CreateFileGDB(Config.SCRATCH_WORKSPACE, "scratch")
-    scratch_dst = os.path.join(scratch_db, dst_name)
+    # I tried using a field map in the Project step but that failed too.
 
     try:
-        print("Reprojecting %s to %s" % (src, scratch_dst)) # dst cannot be in memory!!
-        arcpy.management.Project(in_dataset=src, out_dataset=scratch_dst, 
+        print("Reprojecting %s to %s" % (src, dst)) # dst cannot be in memory!!
+        arcpy.management.Project(in_dataset=src, out_dataset=dst, 
             out_coor_system = Config.WM_SRS, transform_method = Config.TRANSFORMS,
             in_coor_system = Config.LOCAL_SRS,
             preserve_shape="NO_PRESERVE_SHAPE", max_deviation="", vertical="NO_VERTICAL")
@@ -41,11 +51,14 @@ def rebuild_taxlots(src : str, dst_path: str, dst_name : str) -> None:
 
     keepers = [
         'OBJECTID',
+
+        'ACCOUNT_ID',
         'Taxlot',
-        'X_COORD', 'Y_COORD',
+        'X_COORD', 'Y_COORD', ## Needed for street view
         'TAXMAPNUM',
         'TAXLOTKEY',
-        'PROPERTY_C',
+
+        # Mailing address
         'OWNER_LINE',
         'OWNER_LL_1',
         'OWNER_LL_2',
@@ -53,13 +66,21 @@ def rebuild_taxlots(src : str, dst_path: str, dst_name : str) -> None:
         'CITY', 
         'STATE', 
         'ZIP_CODE',
+        
+        # Situs address
         'SITUS_ADDR',
         'SITUS_CITY',
-        'TAXCODE',
-        'ACCOUNT_ID',
+        
+        'TAXCODE', # Probably never used
+
+        # These are used in Sales Search in A&T
+        # "MA", "NH",
+
+        'PROPERTY_C', ## Needed for 'unimproved' layer
+
         'Shape_Length', 'Shape_Area'
     ]
-    actual_fields = arcpy.ListFields(scratch_dst, '*')
+    actual_fields = arcpy.ListFields(dst, '*')
     deletethese = []
     for f in actual_fields:
         if not f.name in keepers and f.type != 'Geometry':
@@ -67,11 +88,10 @@ def rebuild_taxlots(src : str, dst_path: str, dst_name : str) -> None:
     try:
         for field in deletethese:
             print("Deleting", field)
-            arcpy.management.DeleteField(scratch_dst, field)
+            arcpy.management.DeleteField(dst, field)
     except Exception as e:
         print(f"WARNING, field delete failed for {field}.", e)
 
-    arcpy.conversion.FeatureClassToFeatureClass(scratch_dst, dst_path, dst_name)
     return errors
 
 def create_service_definition(map: object, item: dict, sd_file: str):
@@ -86,8 +106,7 @@ def create_service_definition(map: object, item: dict, sd_file: str):
         service_name=item["pkgname"],
         # layers_and_tables # I could use this to allow extra layers in the map to be ignored, for example a basemap.
     )
-
-    sddraft.federatedServerUrl = Config.SERVER_URL
+    sddraft.federatedServerUrl = Config.SERVER_AGS
     sddraft.description = item["description"]
     sddraft.credits = Config.CREDITS
     sddraft.useLimitations = Config.DISCLAIMER_TEXT
@@ -97,18 +116,22 @@ def create_service_definition(map: object, item: dict, sd_file: str):
     # sddraft.serverFolder = item["serverFolder"]
     sddraft.overwriteExistingService = True # WELL THIS FAILS SPECTACULARLY
 
-    # The draft file is an XML file.
+    # The generated draft file is an XML file.
     sddraft_file = os.path.join(Config.SCRATCH_WORKSPACE, item["pkgname"] + ".sddraft")
     sddraft.exportToSDDraft(sddraft_file)
 
     if os.path.exists(sd_file):
-        return sd_file # Uncomment this line for faster debugging.
+        #return sd_file # Uncomment this line for faster debugging.
         os.unlink(sd_file)
 
     print("Creating", sd_file)
-    # "Stage" is the Esri verb for "archive with 7Z".
-    # The 7z file contains a FGDB and various settings.
-    arcpy.server.StageService(sddraft_file, sd_file)
+    try:
+        # "Stage" is the Esri verb meaning "archive with 7Z".
+        # The 7z file contains a FGDB and various settings.
+        arcpy.server.StageService(sddraft_file, sd_file)
+    except Exception as e:
+        print("Staging failed.", e)
+        sd_file = None
 
     return sd_file
 
@@ -119,18 +142,23 @@ if __name__ == "__main__":
     sdefile = "cc-thesql_SDE.sde"
     taxlots_fc = "Clatsop.DBO.taxlot_accounts"
 
-    taxmap_aprx = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
-    taxmap_workspace = taxmap_aprx.defaultGeodatabase
+    # Esri does not provide a method for creating an APRX
+    # I left one here called empty.aprx if you need a starting point.
+    # then you could load taxlots.mapx into it.
+    # An APRX is a ZIP with lots of gunk and JSON "CIM" files in it.
+    project = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
     mapname = Config.TAXLOTS_MAP
-    m = taxmap_aprx.listMaps(mapname)[0]
+    m = project.listMaps(mapname)[0]
     print(f"Project: {Config.TAXMAP_APRX}\nMap: {m.name}")
 
-    # List the layer names in the destination map.
-    listLayers(m)
+    # This locks the taxlots fc in the geodatabase, go figure out THAT.
+#    listLayers(m)
+
+    taxlots_workspace = project.defaultGeodatabase # Could dig this out of APRX.
 
     src = os.path.join(sdefile, taxlots_fc)
-    assert(arcpy.Exists(src))
-    assert(arcpy.Exists(taxmap_workspace))
+#    assert(arcpy.Exists(src))
+#    assert(arcpy.Exists(taxlots_workspace))
 
     initials = os.environ.get("USERNAME")[0:2].upper()
     textmark = (
@@ -138,7 +166,8 @@ if __name__ == "__main__":
     )  # more readable
 
     dst_name = 'Taxlots_WM'
-    #rval = rebuild_taxlots(src, taxmap_workspace, dst_name)
+    dst = os.path.join(taxlots_workspace, dst_name)
+    #rval = import_taxlots(src, dst)
     #if rval>0: exit(-1)
 
     item = {
@@ -148,13 +177,8 @@ if __name__ == "__main__":
     }
     sd_file = os.path.join(Config.SCRATCH_WORKSPACE, item['pkgname']+".sd")
     create_service_definition(m, item, sd_file)
-    assert(os.path.exists(sd_file))
 
-    # 3. Upload the service definition
-    # THIS WILL DESTROY AN EXISTING SERVICE
-    #  * First I should try to update an existing definition.
-    #  * If that fails then I create a new one...
-
+    # 3. Upload the service definition (OVERWRITE EXISTING SERVICE)
     print('Uploading definition using "%s" to the "%s" portal folder.' % (item["pkgname"], item["portalFolder"]))
 
     # Upload the service definition to SERVER
@@ -164,22 +188,22 @@ if __name__ == "__main__":
     try:
         # in_startupType HAS TO BE "STARTED" else no service is started on the SERVER.
         rval = arcpy.SignInToPortal(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-        rval = arcpy.server.UploadServiceDefinition(sd_file, Config.SERVER_URL, in_startupType="STARTED")
+        rval = arcpy.server.UploadServiceDefinition(sd_file, Config.SERVER_AGS, in_startupType="STARTED")
 
     except Exception as e:
-        print("Could not generate service.", e)
+        print("FAIL! Could not generate service.", e)
         if e.args[0].startswith("ERROR 001117"):
             print(f'Open the APRX file in ArcGIS Pro and put a description in the map "{mapname}".')
         exit(1)
 
-    # Add a comment to the service
-
+    # Add a comment to the service, so we know who did what
     portal = GIS(Config.PORTAL_URL, username=Config.PORTAL_USER, password=Config.PORTAL_PASSWORD)            
     print("%s Logged in as %s" % (textmark, str(portal.properties.user.username)))
-    pc = PortalContent(portal)
-
-    target_item = getServiceItem(portal, PortalContent(portal), item["pkgname"])
+    pcm = PortalContent(portal)
+    target_item = pcm.getServiceItem(item["pkgname"])
     target_item.add_comment("Updated %s" % textmark)
-    show(target_item)
+    PortalContent.show(target_item)
 
     print("All done!")
+
+#TAXLOTKEY IS NOT NULL And (STREET_ADD IS NOT NULL Or PO_BOX IS NOT NULL Or CITY IS NOT NULL)

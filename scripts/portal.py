@@ -1,10 +1,10 @@
 """
 This file contains a class "PortalContent" that supplements the ArcGIS GIS ContentManager class.
 
-Currently it's a different version of the 'search' method that does exact
-instead of fuzzy searches by using the REST 'filter' option.
+Esri's 'search' method that does fuzzy matches only (which generally sucks IMO)
+whereas here I do exact searches by using the REST 'filter' option.
 
-find_* comments
+find* method comments
     Weirdness #1: This only searches PORTAL and if for any reason a "delete" fails
     to delete the SERVICE on the SERVER, then when you try to publish, this 
     function will not find any service but the publishing will FAIL saying the
@@ -28,12 +28,15 @@ class PortalContent(object):
 
     VectorTileService = 'Vector Tile Service'
     VectorTilePackage = 'Vector Tile Package'
+    MapImageLayer = 'Map Service'
+    FeatureService = 'Feature Service'
 
     def __init__(self, gis) -> None:
         self.gis = gis
         return
 
-    def find_items(self, title=None, name=None, type=None) -> list:
+
+    def findItems(self, title=None, name=None, type=None) -> list:
         """ 
         Search the Portal using any combination of name, title, and type.
         Return the list of items, which might be empty.
@@ -59,28 +62,51 @@ class PortalContent(object):
         return res['results']
 
 
-    def find_item(self, title=None, name=None, type=None):
+    def findItem(self, title=None, name=None, type=None) -> object:
         """ 
         Search the Portal using any combination of name, title, and type.
         Return the item if EXACTLY ONE MATCH is found, else None.
         """
-        items = self.find_items(title, name, type)
+        items = self.findItems(title, name, type)
         if not items or len(items)!=1:
             return None
         return self.gis.content.get(items[0]['id'])
 
 
-    def find_ids(self, title=None, name=None, type=None) -> list:
+    def findIds(self, title=None, name=None, type=None) -> list:
         """ 
         Search the Portal using any combination of name, title, and type.
         Return a list of ids, which might be empty.
         """
-        items = self.find_items(title, name, type)
+        items = self.findItems(title, name, type)
         ids = [item['id'] for item in items]
         return ids
 
 
-    def get_groups(self, groups) -> list:
+    def getServiceItem(self, title:str, type=None) -> object:
+        """
+        Given the service title and type, 
+        make sure it matches only 1 existing service,
+        return it.
+
+        Services can have identical names, so use a type setting (eg portalcontentmanager.MapImageLayer) to specify one.
+        """
+        item = None
+        ids = self.findIds(title=title, type=type)
+        if len(ids) != 1:
+            # If there are multiple services with the same name, you need to delete the extra(s) yourself!
+            print("ERROR: %d matches for \"%s\" found." % (len(ids), title))
+            if len(ids):
+                print("Service IDs:", ids)
+                for id in ids:
+                    print(self.gis.content.get(id))
+        else:
+            # Load the metadata from the existing layer.
+            item = self.gis.content.get(ids[0])
+        return item
+
+
+    def getGroups(self, groups) -> list:
         """
             Search the groups on the portal using a string or list of strings.
             Return a list of IDs that can be used to set groups on items.
@@ -98,7 +124,7 @@ class PortalContent(object):
                 print("Group '%s' not found." % g, e)
         return group_ids
 
-"""
+    """
     NOT WORKING
     def rename(self, oldname=None, newname=None, type=None) -> bool:
         connection = self.gis._con
@@ -113,65 +139,99 @@ class PortalContent(object):
         }
         res = connection.post(url, params)
         return res['status'] == 'success'
-"""
+    """
 
-# -----
+    def deprecateService(self, service_name: str) -> bool:
+        """
+        Change the status on a service to "deprecated".
+        """    
+        rval = False
+        ids = self.findIds(name=service_name, type=self.VectorTileService)
+        if len(ids) == 1:
+            item = self.gis.content.get(ids[0])
+            item.content_status = "deprecated"
+            item.protect(enable = False)
+            rval = True
+        else:
+            print("WARNING: I can't find a service named \"%s\"." % service_name)
+            items = self.findItems(name=service_name, type=self.VectorTileService)
+            PortalContent.show(items)
+        return rval
 
-def show(items) -> None:
-    """ Show brief information about an item or each item in a list. """
-    if items:
-#       print(json.dumps(items, indent=4)) # This is the verbose version
-        if not isinstance(items, list): items = [items]
-        for item in items:
-            print(item)
-    return
 
+    @staticmethod
+    def show(items) -> None:
+        """ Show brief information about an item or each item in a list. """
+        if items:
+    #       print(json.dumps(items, indent=4)) # This is the verbose version
+            if not isinstance(items, list): items = [items]
+            for item in items:
+                print(item)
+        return
+
+
+##################################################################################
 if __name__ == '__main__':
+
+    # TODO make all tests assertions.
 
     from config import Config
     import json
-    portal = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-    print("Logged in as " + str(portal.properties.user.username))
-    pc = PortalContent(portal)
+    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    print("Logged in as " + str(gis.properties.user.username))
+    pcm = PortalContent(gis)
 
-    items = pc.find_items(title='Vector Tiles STAGED', type=pc.VectorTileService)
-    show(items)
+    items = pcm.findItems(title='Taxlot_Queries')
+    PortalContent.show(items)
 
-    ids = pc.find_ids(title='Vector Tiles STAGED', type=pc.VectorTileService)
-    show(ids)
+    items = pcm.findItems(type=pcm.MapImageLayer)
+    PortalContent.show(items)
 
-    item = pc.find_item(title='Vector Tiles STAGED', type=pc.VectorTileService)
-    show(item)
+    items = pcm.findItems(title='Vector Tiles STAGED', type=pcm.VectorTileService)
+    PortalContent.show(items)
 
-    groups = pc.get_groups(Config.STAGING_GROUP_LIST)
+    ids = pcm.findIds(title='Vector Tiles STAGED', type=pcm.VectorTileService)
+    PortalContent.show(ids)
+
+    item = pcm.findItem(title='Vector Tiles STAGED', type=pcm.VectorTileService)
+    PortalContent.show(item)
+
+    svc = pcm.getServiceItem("DELETEME_Roads", type=pcm.MapImageLayer)
+    PortalContent.show(svc)
+
+    svc = pcm.getServiceItem("DELETEME_Roads")
+    PortalContent.show(svc)
+
+    groups = pcm.getGroups(Config.STAGING_GROUP_LIST)
     print(groups)
 
-    groups = pc.get_groups('GIS Team')
-    print(groups)
-    groups = pc.get_groups(['GIS Team', 'Emergency Management', 'NO SUCH GROUP'])
+    groups = pcm.getGroups(Config.RELEASE_GROUP_LIST)
     print(groups)
 
-    item = pc.find_item(name='Vector_Tiles', title='Vector Tiles', type=pc.VectorTileService)
-    show(item)
+    groups = pcm.getGroups(['GIS Team', 'Emergency Management', 'NO SUCH GROUP'])
+    print(groups)
 
-    show(pc.find_items(name='Unlabeled_Vector_Tiles'))
-    show(pc.find_items(name='Unlabeled_Vector_Tiles',
+    item = pcm.findItem(name='Vector_Tiles', title='Vector Tiles', type=pcm.VectorTileService)
+    PortalContent.show(item)
+
+    PortalContent.show(pcm.findItems(name='Unlabeled_Vector_Tiles'))
+    PortalContent.show(pcm.findItems(name='Unlabeled_Vector_Tiles',
         title='Unlabeled_Vector_Tile_Layer'))
 
     #all = pc.find_items(type=pc.VectorTileService)
     #print(all)
 
     # SADLY it's still not an exact match! See comments at the top of the file
-    print(pc.find_ids(name='Unlabeled_Vector_Tiles.vtpk')) # This fails even if the file exists
+    print(pcm.findIds(name='Unlabeled_Vector_Tiles.vtpk')) # This fails even if the file exists
 
-    print(pc.find_ids(name='Unlabeled_Vector_Tiles', type=pc.VectorTilePackage)) # FIND THE PACKAGE
+    print(pcm.findIds(name='Unlabeled_Vector_Tiles', type=pcm.VectorTilePackage)) # FIND THE PACKAGE
 
     # These should all give the same result.
-    print(pc.find_ids(title='Unlabeled Vector Tiles'))
-    print(pc.find_ids(title='Unlabeled Vector Tiles', type=pc.VectorTileService))
-    print(pc.find_ids(name='Unlabeled_Vector_Tiles',
+    print(pcm.findIds(title='Unlabeled Vector Tiles'))
+    print(pcm.findIds(title='Unlabeled Vector Tiles', type=pcm.VectorTileService))
+    print(pcm.findIds(name='Unlabeled_Vector_Tiles',
         title='Unlabeled Vector Tiles',
-        type=pc.VectorTileService))
+        type=pcm.VectorTileService))
 
     exit(0)
     
