@@ -28,7 +28,6 @@ def find_map(aprx, mapname):
     return maps[0]
 
 
-
 def enableFeatureService(sddraft: str, sddraft_new: str) -> None:
     """
 `   Write an sdddraft (XML) file to enable Feature Services on the MIL.
@@ -58,6 +57,10 @@ def enableFeatureService(sddraft: str, sddraft_new: str) -> None:
 def create_service_definition(map: arcpy._mp.Map, item: dict, sd_file: str) -> None:
     """
     Create an sd file named "sd_file".
+    Input: 
+        map      arcpy map object to be published
+        item     dict describing sd
+        sd_file  name of file to write
     """
 
     # https://pro.arcgis.com/en/pro-app/2.9/arcpy/mapping/map-class.htm
@@ -103,9 +106,10 @@ def create_service_definition(map: arcpy._mp.Map, item: dict, sd_file: str) -> N
     sddraft.exportToSDDraft(sddraft_file)
 
     if os.path.exists(sddraft_with_features): os.unlink(sddraft_with_features)
-    enableFeatureService(sddraft_file, sddraft_with_features)
+    if item['makeFeatures']: 
+        enableFeatureService(sddraft_file, sddraft_with_features)
         
-    print("    Creating", sd_file)
+    print("Creating", sd_file)
     try:
         # "Stage" is the Esri verb for "archive with 7Z".
         # The 7z file contains a FGDB and various settings. If you asked for hosted data, a copy of the data will be in the FGDB.
@@ -128,117 +132,70 @@ def delete_item(item) -> bool:
     return False
 
 
-# ==========================================================================
+def publishMIL(gis: GIS, mapd: dict) -> bool:
+    """
+    Creates a Map Image Layer
+    If features=True, creates a Feature Service (aka "Feature Layer Collection") with same name.
+    """
+    map = find_map(aprx, mapd['name'])
+    if not map:
+        print(f"""ERROR! Map "{mapd['name']}" not found in APRX.""")
+        return False
 
-if __name__ == "__main__":
-
-    (scriptpath, scriptname) = os.path.split(__file__)
-
-    overwrite = True
-    username = os.environ.get("USERNAME")
-    textmark = datetime.datetime.now().strftime("%m/%d/%y %H:%M") + " " + username[0:2].upper()
-    arcpy.env.workspace = Config.SCRATCH_WORKSPACE
-
-    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
     portal = PortalContent(gis)
-    print(f'User {username} logged in to Portal as "{str(gis.properties.user.username)}".')
+    
     # Validate the group list
     release_groups = portal.getGroups(Config.RELEASE_GROUP_LIST)
 
-    try:
-        aprx = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
-    except Exception as e:
-        print("Can't open APRX file,", e)
-        exit(-1)
+    map.clearSelection()
 
-    project_desc = f'<p>Project file: "{aprx.filePath}" <br /><Updated <b>{textmark}</b> {Config.DOC_LINK}</p>' 
+    # There's an Esri bug, it fails to write the popup settings,
+    # so I coded around it. This generates the JSON. It will get written later.
 
-    # The APRX file has to have maps with these mapnames defined.
-    maps = [
-        {
-            "name": "Taxlot Queries",
-            "description": project_desc,
-            "folder": "Taxmaps", 
-            "pkgname": "Taxlot Queries".replace(" ", "_"),
-            "copyData": False
-        }
-    ]
+    popupDict = makePopup(map.listLayers())
+    # For debugging, dump to a file as JSON
+    json_file = os.path.join(Config.SCRATCH_WORKSPACE, mapd["pkgname"] + ".json")
+    with open(json_file, 'w') as fp:
+        json.dump(popupDict, fp, indent=2)
 
-    total = len(maps)
-    n = 0
-    for item in maps:
-        name = item["name"]
-        n += 1
-        progress = "%d/%d" % (n, total)
+    # https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/automate-sharing-web-layers.htm
 
-        map = find_map(aprx, name)
-        if not map:
-            print(f'ERROR! Map "{name}" not found in APRX.')
-            continue
-        map.clearSelection()
+    sd_file = os.path.join(Config.SCRATCH_WORKSPACE, mapd["pkgname"] + ".sd")
+    # 1. Create a service definition draft
+    # 2. Stage the service (zip)
+    print(f'Building "{mapd["name"]}" sd file in {Config.SCRATCH_WORKSPACE}.')    
+    create_service_definition(map, mapd, sd_file)
 
-        # There's a bug that causes the ArcPy code to fail to write the popup settings,
-        # so I coded around it. This generates the JSON. It will get written later.
-        #cimMap = map.getDefinition(cim_version='V2')
+    # 3. Upload the service definition
+    # This will overwrite an existing service
+    # or publish a new one.
+    print(f'Uploading "{sd_file}" to "{mapd["folder"]}" folder.')
 
-        popupDict = makePopup(map.listLayers())
-        # For debugging, dump to a file as JSON
-        json_file = os.path.join(Config.SCRATCH_WORKSPACE, item["pkgname"] + ".json")
-        with open(json_file, 'w') as fp:
-            json.dump(popupDict, fp, indent=2)
+    # Upload the service definition to SERVER
+    # In theory everything needed to publish the service is already in the SD file.
+    # https://pro.arcgis.com/en/pro-app/latest/tool-reference/server/upload-service-definition.htm
+    # You can override permissions, ownership, groups here too.
+    # in_startupType HAS TO BE "STARTED" else no service is started on the SERVER.
+    rval = arcpy.SignInToPortal(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    rval = arcpy.server.UploadServiceDefinition(sd_file, Config.SERVER_AGS, in_startupType="STARTED")
 
-        # https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/automate-sharing-web-layers.htm
+    # Update sharing.
+    # Skipping this step bit me, (2023-02-09) because suddenly everyone had to log in. (The service was not accessible by Everyone.)
 
-        sd_file = os.path.join(Config.SCRATCH_WORKSPACE, item["pkgname"] + ".sd")
-        if arcpy.Exists(sd_file) and not overwrite:
-            print(f"Using existing file \"{sd_file}\".")
-        else:
-            print(progress, f'Building "{item["name"]}" sd file in {Config.SCRATCH_WORKSPACE}.')
-            
-            # 1. Create a service definition draft
-            # 2. Stage the service (zip)
-            create_service_definition(map, item, sd_file)
+    mil_item = portal.getServiceItem(title=mapd["name"], type=portal.MapImageLayer)
+    mil_item.update(item_properties = { 'text' : popupDict })
 
-        # 3. Upload the service definition
-        # This will overwrite an existing service
-        # or publish a new one.
+    mil_item.content_status = 'authoritative'
+    mil_item.protect(enable=True)
+    mil_item.share(everyone=True, org=True,
+        groups=release_groups, allow_members_to_edit=True)
 
-        print(f'    Uploading "{sd_file}" to "{item["folder"]}" folder.')
+    # Add a comment to the service
+    # Comments will log whoever ran the script and when. They can't use HTML
+    mil_item.add_comment(f"Updated as {username} by {scriptname}.")
 
-        # Upload the service definition to SERVER
-        # In theory everything needed to publish the service is already in the SD file.
-        # https://pro.arcgis.com/en/pro-app/latest/tool-reference/server/upload-service-definition.htm
-        # You can override permissions, ownership, groups here too.
-        try:
-            # in_startupType HAS TO BE "STARTED" else no service is started on the SERVER.
-            rval = arcpy.SignInToPortal(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-            rval = arcpy.server.UploadServiceDefinition(sd_file, Config.SERVER_AGS, in_startupType="STARTED")
-
-        except Exception as e:
-            print("Could not generate service.", e)
-            if e.args[0].startswith("ERROR 001117"):
-                print(f'ERROR: Open the APRX file in ArcGIS Pro and put a description in properties for "{name}".')
-                print(f'Skipping "{name}".')
-            continue
-
-        # Update sharing.
-        # Skipping this step bit me, (2023-02-09) because suddenly everyone had to log in. (The service was not accessible by Everyone.)
-
-        # This script creates a MIL and a feature service with the same name.
-
-        mil_item = portal.getServiceItem(title=item["name"], type=portal.MapImageLayer)
-        mil_item.update(item_properties = { 'text' : popupDict })
-
-        mil_item.content_status = 'authoritative'
-        mil_item.protect(enable=True)
-        mil_item.share(everyone=True, org=True,
-            groups=release_groups, allow_members_to_edit=True)
-
-        # Add a comment to the service
-        # Comments will log whoever ran the script and when. They can't use HTML
-        mil_item.add_comment(f"Updated as {username} by {scriptname}.")
-
-        fl_item = portal.getServiceItem(title=item["name"], type=portal.FeatureService)
+    if mapd['makeFeatures']:
+        fl_item = portal.getServiceItem(title=mapd["name"], type=portal.FeatureService)
         if fl_item:
             fl_item.update(item_properties = { 'text' : popupDict })
             fl_item.content_status = 'authoritative'
@@ -248,6 +205,42 @@ if __name__ == "__main__":
 
             fl_item.add_comment(f"Updated as {username} by {scriptname}.")
 
+    return True
+
+# ==========================================================================
+if __name__ == "__main__":
+
+    (scriptpath, scriptname) = os.path.split(__file__)
+
+    username = os.environ.get("USERNAME")
+    textmark = datetime.datetime.now().strftime("%m/%d/%y %H:%M") + " " + username[0:2].upper()
+    arcpy.env.workspace = Config.SCRATCH_WORKSPACE
+
+    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    print(f'User {username} logged in to Portal as "{str(gis.properties.user.username)}".')
+
+    try:
+        aprx = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
+    except Exception as e:
+        print("Can't open APRX file,", e)
+        exit(-1)
+
+    mapd = {
+        "name": "Taxlot Queries",
+        "description": f"""<p>Project file: "{aprx.filePath}" <br />
+        <Updated <b>{textmark}</b> {Config.DOC_LINK}</p>""",
+        "folder": "Taxmaps", 
+        "pkgname": "Taxlot_Queries",
+        "copyData": False,
+        "makeFeatures": True, # Also make a feature layer collection
+    }
+
+    try:
+        publishMIL(gis, mapd)
+    except Exception as e:
+        print("Could not generate service.", e)
+        if e.args[0].startswith("ERROR 001117"):
+            print(f'ERROR: Open the APRX file in ArcGIS Pro and put a description in properties".') 
 
     print("All done!!!")
 
