@@ -16,10 +16,6 @@ import json
 sys.path.insert(0,'')
 from config import Config
 
-import subprocess
-BROWSER = "C:/Program Files/Mozilla Firefox/firefox.exe"
-SHOWPOPUP = False
-
 
 def find_map(aprx, mapname):
     maps = aprx.listMaps(mapname)
@@ -94,7 +90,7 @@ def create_service_definition(map: arcpy._mp.Map, item: dict, sd_file: str) -> N
     sddraft.useLimitations = map.metadata.accessConstraints
     sddraft.tags = map.metadata.tags
 
-    sddraft.portalFolder = item["folder"] # This is not working today. All goes in root. Bah!
+    sddraft.portalFolder = item["folder"] # This is not working. All goes in root. Bah!
     # sddraft.serverFolder
 
     #sddraft.offline = True # Set this if you don't have access to Portal but still want to create the draft. 
@@ -105,16 +101,20 @@ def create_service_definition(map: arcpy._mp.Map, item: dict, sd_file: str) -> N
     if os.path.exists(sddraft_file): os.unlink(sddraft_file)
     sddraft.exportToSDDraft(sddraft_file)
 
-    if os.path.exists(sddraft_with_features): os.unlink(sddraft_with_features)
+    # Read the .sddraft file
+    #doc = DOM.parse(sddraft_file)
+    
     if item['makeFeatures']: 
+        if os.path.exists(sddraft_with_features): os.unlink(sddraft_with_features)
         enableFeatureService(sddraft_file, sddraft_with_features)
+        sddraft_file = sddraft_with_features
         
     print("Creating", sd_file)
     try:
         # "Stage" is the Esri verb for "archive with 7Z".
         # The 7z file contains a FGDB and various settings. If you asked for hosted data, a copy of the data will be in the FGDB.
         if os.path.exists(sd_file): os.unlink(sd_file)
-        arcpy.server.StageService(sddraft_with_features, sd_file)
+        arcpy.server.StageService(sddraft_file, sd_file)
     except Exception as e:
         print("ERROR:", e)
         raise e
@@ -132,22 +132,30 @@ def delete_item(item) -> bool:
     return False
 
 
-def publishMIL(gis: GIS, mapd: dict) -> bool:
+def publishMIL(gis: GIS, aprx: object, mapd: dict) -> None:
     """
     Creates a Map Image Layer
     If features=True, creates a Feature Service (aka "Feature Layer Collection") with same name.
     """
     map = find_map(aprx, mapd['name'])
     if not map:
-        print(f"""ERROR! Map "{mapd['name']}" not found in APRX.""")
-        return False
-
+        raise Exception(f"""ERROR! Map "{mapd['name']}" not found in APRX.""")
     portal = PortalContent(gis)
-    
+    username = os.environ.get("USERNAME")
+
     # Validate the group list
     release_groups = portal.getGroups(Config.RELEASE_GROUP_LIST)
 
-    map.clearSelection()
+    map.clearSelection() # I wonder if this works?
+
+    cimMap = map.getDefinition('V2')
+    j = arcpy.cim.GetJSONForCIMObject(cimMap.defaultExtent, 'V2')
+    defaultMapExtent = json.loads(j)
+    extentProperty = [
+        [defaultMapExtent['xmin'], defaultMapExtent['ymin']],
+        [defaultMapExtent['xmax'], defaultMapExtent['ymax']]
+    ]
+    print("Default map extent is", extentProperty)
 
     # There's an Esri bug, it fails to write the popup settings,
     # so I coded around it. This generates the JSON. It will get written later.
@@ -183,64 +191,38 @@ def publishMIL(gis: GIS, mapd: dict) -> bool:
     # Skipping this step bit me, (2023-02-09) because suddenly everyone had to log in. (The service was not accessible by Everyone.)
 
     mil_item = portal.getServiceItem(title=mapd["name"], type=portal.MapImageLayer)
-    mil_item.update(item_properties = { 'text' : popupDict })
 
+    # For some reason, this looks like WGS84 which is totally wrong!
+    print("Current extent", mil_item.extent) 
+    mil_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })
+
+    print("Setting status to authoritative")
     mil_item.content_status = 'authoritative'
+    print("Marking as 'do not delete'.")
     mil_item.protect(enable=True)
-    mil_item.share(everyone=True, org=True,
-        groups=release_groups, allow_members_to_edit=True)
+    print("Setting sharing")
+    mil_item.share(everyone=True, org=True, groups=release_groups, allow_members_to_edit=True)
 
     # Add a comment to the service
     # Comments will log whoever ran the script and when. They can't use HTML
-    mil_item.add_comment(f"Updated as {username} by {scriptname}.")
+    print("Adding comment")
+    mil_item.add_comment(f"Updated as {username}.")
 
+    print("features")
     if mapd['makeFeatures']:
         fl_item = portal.getServiceItem(title=mapd["name"], type=portal.FeatureService)
         if fl_item:
-            fl_item.update(item_properties = { 'text' : popupDict })
+            fl_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })
             fl_item.content_status = 'authoritative'
             fl_item.protect(enable=True)
             fl_item.share(everyone=True, org=True,
                 groups=release_groups, allow_members_to_edit=True)
 
-            fl_item.add_comment(f"Updated as {username} by {scriptname}.")
+            fl_item.add_comment(f"Updated as {username}.")
 
-    return True
+    return
 
 # ==========================================================================
 if __name__ == "__main__":
-
-    (scriptpath, scriptname) = os.path.split(__file__)
-
-    username = os.environ.get("USERNAME")
-    textmark = datetime.datetime.now().strftime("%m/%d/%y %H:%M") + " " + username[0:2].upper()
-    arcpy.env.workspace = Config.SCRATCH_WORKSPACE
-
-    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-    print(f'User {username} logged in to Portal as "{str(gis.properties.user.username)}".')
-
-    try:
-        aprx = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
-    except Exception as e:
-        print("Can't open APRX file,", e)
-        exit(-1)
-
-    mapd = {
-        "name": "Taxlot Queries",
-        "description": f"""<p>Project file: "{aprx.filePath}" <br />
-        <Updated <b>{textmark}</b> {Config.DOC_LINK}</p>""",
-        "folder": "Taxmaps", 
-        "pkgname": "Taxlot_Queries",
-        "copyData": False,
-        "makeFeatures": True, # Also make a feature layer collection
-    }
-
-    try:
-        publishMIL(gis, mapd)
-    except Exception as e:
-        print("Could not generate service.", e)
-        if e.args[0].startswith("ERROR 001117"):
-            print(f'ERROR: Open the APRX file in ArcGIS Pro and put a description in properties".') 
-
-    print("All done!!!")
-
+    print("No unit tests here yet.")
+    

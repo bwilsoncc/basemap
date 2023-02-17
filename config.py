@@ -41,7 +41,7 @@ class Config(object):
     TRANSFORMS = ["NAD_1983_HARN_To_WGS_1984_2"]
 
     # This gets tagged onto the service description so we can figure out how to do it again in 3 months.
-    DOC_LINK = "<a target=\"_github\" href=\"https://github.com/bwilsoncc/basemap#readme\">How to update it.</a></p>"
+    DOC_LINK = "<a target=\"_github\" href=\"https://github.com/bwilsoncc/basemap#readme\">README for this project</a></p>"
 
     SCRATCH_WORKSPACE = "C:\TEMP"
     if not os.path.exists(SCRATCH_WORKSPACE):

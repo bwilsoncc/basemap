@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
     portal = PortalContent(gis)
-    print("Logged in as %s" % str(portal.gis.properties.user.username))
+    print("Logged in as", str(portal.gis.properties.user.username))
 
     try:
         aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
@@ -36,16 +36,20 @@ if __name__ == "__main__":
     textmark = datetime.datetime.now().strftime("%m/%d/%y %H:%M") + " " + initials
 
     mapd = {
-        "name": "Roads Test",
-        "description": f"""<p>Project file: <a href="file:///>{aprx.filePath}</a><br />
-        {Config.DOC_LINK} Script: <a href="https://github.com/bwilsoncc/basemap/blob/main/scripts/{scriptname}">{scriptname}</a><br />
-        <em>Updated {textmark}</p></em>""",
-        "folder": "Public Works", 
-        "pkgname": "Roads",
-        "copyData": True,
-        "makeFeatures": False, # only make the MIL
+        "name": "Taxlot Queries",
+        "description": f"""<p>Project file: "{aprx.filePath}" Script: {scriptname}<br />
+        <Updated <b>{textmark}</b> {Config.DOC_LINK}</p>""",
+        "folder": "Taxmaps", 
+        "pkgname": "Taxlot_Queries",
+        "copyData": False,
+        "makeFeatures": True, # Also make a feature layer collection
     }
+    try:
+        publishMIL(gis, aprx, mapd)
 
-    publishMIL(gis, aprx, mapd)
-
+    except Exception as e:
+        print("Could not generate service.", e)
+        if e.args[0].startswith("ERROR 001117"):
+            print(f'ERROR: Open the APRX file in ArcGIS Pro and put a description in properties.')
+            
     print("All done!!!")
