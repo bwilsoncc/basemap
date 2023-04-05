@@ -21,12 +21,37 @@ import arcpy
 from arcgis.gis import GIS
 from datetime import datetime
 from config import Config
-from scripts.portal import PortalContent
+from portal import PortalContent
 
 #TEST = True # Generate a test service only.
 TEST = False # Generate real services.
 
 #from watermark import mark
+
+class StageBasemapServices(object):
+
+    def __init__(self) -> None:
+        self.label = "Stage Basemap Services"
+        self.description = """Stage Basemap Services."""
+        self.canRunInBackground = False
+        self.category = "CCPublish"
+        #self.stylesheet = "" # I don't know how to use this yet.
+        return
+
+    def getParameterInfo(self) -> list:
+        return []
+
+    def isLicensed(self) -> bool:
+        return True
+
+    def updateParameters(self, parameters) -> None:
+        return
+
+    def updateMessages(self, parameters) -> None:
+        return
+
+    def execute(self, parameters, messages) -> None:
+        return
 
 def find_map(aprx, mapname):
     maps = aprx.listMaps(mapname)
@@ -163,8 +188,6 @@ def stage_tile_service(portal, pkg_item, pkgname, thumbnail, snippet, descriptio
         else:
             return None
 
-    print("Staging tile service...")
-
 #    lyr_name = pkgname # "Vector_Tiles" was failing failing failing!
     lyr_name = (pkgname + '_' + datestamp).replace(' ', '_')
     lyr_items = pc.findItems(name=lyr_name, type=pc.VectorTileService)
@@ -183,7 +206,7 @@ def stage_tile_service(portal, pkg_item, pkgname, thumbnail, snippet, descriptio
             })
         # I really want this set NOW!
         lyr_item.update(item_properties={"title": lyr_title})
-        print("service item", lyr_item)
+        #print("service item", lyr_item)
 
     except Exception as e:
         print("Staging failed!", e)
@@ -230,10 +253,10 @@ if __name__ == "__main__":
     datestamp = datetime.now().strftime("%Y%m%d %H%M") # good for filenames
     textmark  = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials # more readable by humans
 
-    portal = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
     print("%s Logged in to %s as %s" %
-          (textmark, Config.PORTAL_URL, str(portal.properties.user.username)))
-    pc = PortalContent(portal)
+          (textmark, Config.PORTAL_URL, str(gis.properties.user.username)))
+    pc = PortalContent(gis)
 
     try:
         aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
@@ -260,19 +283,19 @@ if __name__ == "__main__":
                 "mapname": Config.COMBINED_MAP, 
                 "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
         It includes both the labels and the features in one vector tile layer.</p>"""
-                + layer_desc + project_desc + Config.AUTOGRAPH,
+                + layer_desc + project_desc,
                 "min_zoom": Config.MIN_COUNTY_ZOOM
             },
             {
                 "mapname": Config.LABEL_MAP, 
                 "description": """<p>This layer contains only labels and the county boundary. Use it as a reference layer.</p>""" 
-                + layer_desc + project_desc + Config.AUTOGRAPH,
+                + layer_desc + project_desc,
                 "min_zoom": Config.MIN_COUNTY_ZOOM
             },
             {
                 "mapname": Config.FEATURE_MAP, 
                 "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
-                + layer_desc + project_desc + Config.AUTOGRAPH,
+                + layer_desc + project_desc,
                 "min_zoom": Config.MIN_COUNTY_ZOOM
             },
 
@@ -324,17 +347,18 @@ if __name__ == "__main__":
             tn = map.metadata.thumbnailUri
         ok = os.path.exists(tn)
 
-        print("%s Uploading tile package. %s" % (progress, pkgfile))
-        pkg_item = upload_tile_package(portal, pkgname, pkgfile, tn, textmark, item["description"], overwrite=True)
+        print(f"{progress} Uploading tile package. {pkgfile}")
+        pkg_item = upload_tile_package(gis, pkgname, pkgfile, tn, textmark, item["description"], overwrite=True)
         if not pkg_item: continue
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.
         res = pkg_item.share(everyone=False, org=False, groups=staging_groups, allow_members_to_edit=True)
 
-        print("%s Staging service. %s" % (progress, pkgname))
-        lyr_item = stage_tile_service(portal, pkg_item, pkgname, tn, textmark, item["description"], overwrite=True)
+        print(f"{progress} Staging service. {pkgname}")
+        lyr_item = stage_tile_service(gis, pkg_item, pkgname, tn, textmark, item["description"], overwrite=True)
         if not lyr_item: continue
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.
         res = lyr_item.share(everyone=False, org=False, groups=staging_groups, allow_members_to_edit=True)
+        url = Config.PORTAL_URL + f"/home/item.html?id={lyr_item.id}"
+        print(f"    Published as {lyr_item.homepage}")
 
     print("All done!!!")
-# That's all!

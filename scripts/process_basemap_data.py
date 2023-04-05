@@ -10,10 +10,148 @@ DON'T run it in Arc Pro in a Jupyter notebook, because first it will throw error
 and then when you finally get it to run it will tear out the original layer from the map
 and throw away the symbology you spent 3 days working on. You will shed tears.
 """
-import os
+import sys, os
 import arcpy
-from utils import listLayers, unsplit_lines
 from config import Config
+
+class ProcessBasemapData(object):
+
+    def __init__(self) -> None:
+        self.label = "Process Basemap Data"
+        self.description = """Prepare data for webmaps."""
+        self.canRunInBackground = False
+        self.category = "CCPublish"
+        #self.stylesheet = "" # I don't know how to use this yet.
+        return
+
+    def getParameterInfo(self) -> list:
+        """
+        I suppose I could let the user specify  something here, with good defaults.
+        Just to give more info on what will happen?
+        """
+        map = arcpy.Parameter(
+            name="map",
+            displayName="Map",
+            datatype=["GPString","GPMap"],
+            parameterType="Required", # Required|Optional|Derived
+            direction="Input", # Input|Output
+        )
+        map.value = Config.DATASOURCE_MAP
+
+        # I suppose defining the layers here could be useful?
+        # Roads
+        # Trails
+        # Water_Lines
+        # Water polygons
+        # Parks
+        # County Boundary
+
+        # params[1] = FGDB workspace
+        workspace = arcpy.Parameter(
+            name="workspace",
+            displayName="Destination for reprojected data",
+            datatype="DEWorkspace",
+            parameterType="Required", # Required|Optional|Derived
+            direction="Input", # Input|Output
+        )
+        workspace.value = "Basemap.gdb"
+
+        return [map, workspace]
+
+    def isLicensed(self) -> bool:
+        return True
+
+    def updateParameters(self, parameters) -> None:
+        return
+
+    def updateMessages(self, parameters) -> None:
+        return
+
+    def execute(self, params, messages) -> None:
+        map = params[0].value
+        try:
+            aprx = arcpy.mp.ArcGISProject("CURRENT")
+        except Exception as e:
+            arcpy.AddMessage(f"Could not use CURRENT. {e}")
+            aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)       
+        try:
+            m = aprx.listMaps(map)[0]
+        except Exception as e:
+            arcpy.AddError(f"Could not use map. {e}")
+
+        workspace = params[1].valueAsText
+
+        arcpy.AddMessage(f'"{m.name}" is {type(m)} and {workspace} is {type(workspace)}')
+
+    
+        layers = find_my_layers(m, workspace)
+
+        # I tried to set the version I wanted to read here and failed
+        # Show what version is selected on each layer.
+        for (ds, layer) in layers.items():
+            arcpy.AddMessage(f'Source "{ds}": {layer["layer"].connectionProperties["dataset"]}')
+            arcpy.AddMessage(f'version: {layer["layer"].connectionProperties["connection_info"]["version"]}')
+
+        arcpy.env.workspace = "in_memory"
+
+        # Roads that are unsplit are better for query operations.
+        (roads, roads_unsplit) = unsplit_road_lines(layers['roads']['layer'])
+        layers["roads_unsplit"] = {"layer": roads_unsplit, "dest": basemap_workspace} # this is used for polylines and queries
+        layers['roads'] = {"layer": roads, "dest": basemap_workspace} # this is used for labels
+        layers['water_lines'] = {"layer":unsplit_water_lines(layers['water_lines']['layer']), "dest": basemap_workspace}
+
+        errors = 0
+        for (dst,layer) in layers.items():
+            try:
+                dstpath = os.path.join(layer['dest'], dst)
+                src = layer['layer']    
+                arcpy.AddMessage(f"Reprojecting {src} to {dstpath}")
+                arcpy.management.Project(in_dataset=src, out_dataset=dstpath, 
+                    out_coor_system = Config.WM_SRS, transform_method = Config.TRANSFORMS,
+                    in_coor_system = Config.LOCAL_SRS,
+                    preserve_shape="NO_PRESERVE_SHAPE", max_deviation="", vertical="NO_VERTICAL")
+            except Exception as e:
+                arcpy.AddMessage(f"Failed! {e}")
+                errors += 1
+
+        if errors:
+            arcpy.AddError("There were errors (%d anyway), this is bad." % errors)
+
+        return
+
+
+def unsplit_lines(src_layer, dissolve_attribute_list=None, attributes=None) -> tuple:
+    """
+    Copy then unsplit (like 'dissolve' but for line features)
+
+    Doing copy because this feature class won't go through otherwise due to errors about participating in a topology maybe
+
+    Unsplitting has the side effect of getting rid of attributes;
+    list the ones you want to preserve in 'attributes'
+    """
+    assert(src_layer.isFeatureLayer)
+    scratch = (src_layer.name + "_2913").replace(' ', '_')
+    try:
+        arcpy.management.CopyFeatures(src_layer, scratch)
+        print("\"%s\" feature count = %s" % (scratch, arcpy.management.GetCount(scratch)))
+    except Exception as e:
+        print("Download of \"%s\" failed." % src_layer.name, e)
+    assert(arcpy.Exists(scratch))
+
+    print("Unsplitting %s." % scratch)
+    dissolved = scratch + "_unsplit"
+    arcpy.management.UnsplitLine(scratch, dissolved, 
+        dissolve_attribute_list, # dissolve on these -- the attributes will be preserved
+        attributes # list other attributes that you want to preserve here
+    )
+    print("Unsplit feature count =", arcpy.management.GetCount(dissolved))
+
+    # Unsplit changed all the attributes, now change them back!
+    for old_name, stat_field in attributes:
+        new_name = stat_field + "_" + old_name
+        results = arcpy.management.AlterField(in_table= dissolved, field= new_name, new_field_name= old_name.lower(), new_field_alias= old_name)
+
+    return (scratch, dissolved)
 
 
 def unsplit_road_lines(road_lines_layer):
@@ -73,6 +211,7 @@ def find_my_layers(m : arcpy._mp.Map, workspace: str) -> dict:
     Return a dict of the layers from the map that we need.
     """
     layers = dict()
+    ll = m.listLayers()
 
     # Point at all the required layers.
     try:
@@ -93,71 +232,23 @@ def find_my_layers(m : arcpy._mp.Map, workspace: str) -> dict:
 
 # ===============================
 if __name__ == "__main__":
-
-    cwd = os.getcwd()
+    class Messenger(object):
+        def addMessage(self, message: str) -> None:
+            print(message)
+            return
+ 
     arcpy.env.overwriteOutput = True
 
+    assert(arcpy.Exists(Config.BASEMAP_APRX))
     basemap_aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
     basemap_workspace = basemap_aprx.defaultGeodatabase
-    maps = basemap_aprx.listMaps()
     m = basemap_aprx.listMaps(Config.DATASOURCE_MAP)[0]
     print(f"Project: {Config.BASEMAP_APRX} Map: \"{m.name}\"")
-  
-        # List the layer names in this map.
-    #listLayers(m)
 
-    layers = find_my_layers(m, basemap_workspace)
-
-    # I tried to set the version I wanted to read here and failed
-    # every way possible. 
-    # I tried reading the APRX file and failed there too.
-    # It worked for a few months. Perhaps after upgrading ArcPro???  
-    # No -- it's arcpy installed the wrong way somehow.
-    #conn = "k:\\webmaps\\basemap\\cc-gis.sde"
-    #arcpy.env.workspace = conn
-    #roads = 'Clatsop.DBO.roads'
-    #roads_layer = arcpy.management.MakeFeatureLayer('roads', 'roads_layer')
-        
-    # Show what version is selected on each layer.
-    for (ds, layer) in layers.items():
-        
-        print(f'Source "{ds}":', 
-            layer['layer'].connectionProperties['dataset'],
-            '  version:', layer['layer'].connectionProperties['connection_info']['version'])
-
-    arcpy.env.workspace = "in_memory"
-
-    # Roads that are unsplit are better for query operations.
-    (roads, roads_unsplit) = unsplit_road_lines(layers['roads']['layer'])
-    layers["roads_unsplit"] = {"layer": roads_unsplit, "dest": basemap_workspace} # this is used for polylines and queries
-    layers['roads'] = {"layer": roads, "dest": basemap_workspace} # this is used for labels
-    layers['water_lines'] = {"layer":unsplit_water_lines(layers['water_lines']['layer']), "dest": basemap_workspace}
-
-    # Keep only features with names. No sense in having a popup when it's empty.
-    # This is an idea but gives kind of bad feedback when you click and 
-    # nothing happens. Better to tell as much as we know.
-    #roads_layer = roads_unsplit + '_layer'
-    #arcpy.management.MakeFeatureLayer(roads_unsplit, roads_layer, 
-    #    where_clause='"StreetName" IS NOT NULL" AND StreetName"!=""'")
-    #print("road layer =", arcpy.management.GetCount(roads_layer))
-    
-    errors = 0
-    for (dst,layer) in layers.items():
-        try:
-            dstpath = os.path.join(layer['dest'], dst)
-            src = layer['layer']    
-            print("Reprojecting %s to %s" % (src, dstpath))
-            arcpy.management.Project(in_dataset=src, out_dataset=dstpath, 
-                out_coor_system = Config.WM_SRS, transform_method = Config.TRANSFORMS,
-                in_coor_system = Config.LOCAL_SRS,
-                preserve_shape="NO_PRESERVE_SHAPE", max_deviation="", vertical="NO_VERTICAL")
-        except Exception as e:
-            print("Failed!", e)
-            errors += 1
-
-    if errors:
-        print("There were errors (%d anyway), this is bad." % errors)
-        exit(-1)
+    pbd = ProcessBasemapData()
+    params = pbd.getParameterInfo()
+    arcpy.SetParameter(0, m)
+    pbd.execute(params, Messenger)
 
     print("All done!!")
 

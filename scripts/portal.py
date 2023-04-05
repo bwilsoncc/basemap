@@ -175,7 +175,7 @@ if __name__ == '__main__':
 
     # TODO make all tests assertions.
 
-    from config import Config
+    from scripts.config import Config
     import json
     gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
     print("Logged in as " + str(gis.properties.user.username))

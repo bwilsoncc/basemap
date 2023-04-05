@@ -8,7 +8,7 @@ import os, sys
 from datetime import datetime
 import arcpy
 from arcgis.gis import GIS
-from config import Config
+from scripts.config import Config
 from scripts.portal import PortalContent
 sys.path.insert(0,'')
 

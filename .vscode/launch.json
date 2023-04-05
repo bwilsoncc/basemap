@@ -14,7 +14,6 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },
-            "console": "internalConsole",
             "justMyCode": true
         }
     ]

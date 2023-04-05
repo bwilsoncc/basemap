@@ -10,8 +10,8 @@ import os, sys
 import datetime
 import arcpy
 from arcgis.gis import GIS
-from scripts.publish_MIL import publishMIL
-from scripts.portal import PortalContent
+from portal import PortalContent
+from publish_service import BuildSD, PublishFromSD
 from config import Config
 
 sys.path.insert(0,'')
@@ -26,30 +26,29 @@ if __name__ == "__main__":
     portal = PortalContent(gis)
     print("Logged in as", str(portal.gis.properties.user.username))
 
-    try:
-        aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
-    except Exception as e:
-        print("Can't open APRX file,", e)
-        exit(-1)
+    aprx = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
 
     initials = os.environ.get("USERNAME")[0:2].upper()
     textmark = datetime.datetime.now().strftime("%m/%d/%y %H:%M") + " " + initials
 
-    mapd = {
-        "name": "Taxlot Queries",
-        "description": f"""<p>Project file: "{aprx.filePath}" Script: {scriptname}<br />
-        <Updated <b>{textmark}</b> {Config.DOC_LINK}</p>""",
-        "folder": "Taxmaps", 
-        "pkgname": "Taxlot_Queries",
-        "copyData": False,
-        "makeFeatures": True, # Also make a feature layer collection
-    }
-    try:
-        publishMIL(gis, aprx, mapd)
-
-    except Exception as e:
-        print("Could not generate service.", e)
-        if e.args[0].startswith("ERROR 001117"):
-            print(f'ERROR: Open the APRX file in ArcGIS Pro and put a description in properties.')
+    maps = [{
+            "name": "Taxlot Queries",
+            "description": f"""<p>Project file: "{aprx.filePath}" Script: {scriptname}<br />
+            <Updated <b>{textmark}</b> {Config.DOC_LINK}</p>""",
+            "folder": "Taxmaps", 
+            "pkgname": "Taxlot_Queries",
+            "copyData": False,
+            "makeFeatures": True, # Also make a feature layer collection
+        },
+    ]
+ 
+    for mapd in maps:
+        map = aprx.listMaps(mapd['name'])[0]
+        try:
+            sd_file = BuildSD(map, mapd)
+        except:
+            # Perhaps analysis failed?
+            continue
+        PublishFromSD(gis, map, mapd, sd_file)
             
     print("All done!!!")

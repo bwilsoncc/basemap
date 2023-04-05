@@ -110,7 +110,7 @@ if __name__ == "__main__":
     # It makes copies into C:\TEMP so the originals are unchanged.
 
     from datetime import datetime
-    from config import Config
+    from scripts.config import Config
 
     # Collect the information we'll put in a comment string.
     cwd,scriptname = os.path.split(__file__)

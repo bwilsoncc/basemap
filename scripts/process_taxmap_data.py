@@ -12,7 +12,6 @@ and throw away the symbology you spent 3 days working on. You will shed tears.
 """
 import os
 import arcpy
-from utils import listLayers
 from config import Config
 
 def find_my_layers(m : arcpy._mp.Map, workspace: str) -> dict:
@@ -21,7 +20,7 @@ def find_my_layers(m : arcpy._mp.Map, workspace: str) -> dict:
     """
     layers = dict()
 
-    # Point at all the required layers.
+    # Point at all the required layers. This is a WORK IN PROGRESS, clearly.
     try:
         # Taxmaps data
         layers['taxlots'] = {"layer": m.listLayers('Taxlots')[0], "dest": taxmap_workspace}
@@ -40,18 +39,20 @@ if __name__ == "__main__":
     arcpy.env.overwriteOutput = True
     arcpy.env.workspace = "in_memory"
 
-I NEED TO SET UP THE taxmap project to be the canonical souce for data here
-
     taxmap_aprx = arcpy.mp.ArcGISProject(Config.TAXMAP_APRX)
     taxmap_workspace = taxmap_aprx.defaultGeodatabase
     maps = taxmap_aprx.listMaps()
     m = taxmap_aprx.listMaps(Config.DATASOURCE_MAP)[0]
     print(f"Project: {Config.TAXMAP_APRX} Workspace:\"{taxmap_workspace}\"\n")
   
-    # List the layer names in this map.
-    listLayers(m)
-
-    layers = find_my_layers(m, workspace)
+    # List the layer names in this map. Helps debug.
+    n = 0
+    for item in m.listLayers():
+        if item.name:
+            print(n, item.name)
+        n += 1
+    
+    layers = find_my_layers(m, taxmap_workspace)
 
     errors = 0
     for (dst,layer) in layers.items():
@@ -68,7 +69,7 @@ I NEED TO SET UP THE taxmap project to be the canonical souce for data here
             errors += 1
 
     if errors:
-        print("There were errors (%d anyway), this is bad." % errors)
+        print(f"ERRORS: There were errors ({errors} anyway), this is bad.")
         exit(-1)
 
     print("All done!!")

@@ -68,6 +68,8 @@ For us, in practice it's not so bad because very few feature layers are used in 
 
 **If you absolutely must have lots of Feature Layers and can't use MILs instead, this could be a problem preventing you from using labels in a Vector Tile layer**
 
+Currently I think using feature layers for labels work better than VT's. I don't understand **why** there is a constraint on layer ordering. Maybe it's fake.
+
 ## Collector notes (also Field Maps?)
 
 ___Once you get the vector tile package built and published, you won't want to use the service in Collector.___
@@ -144,9 +146,12 @@ K:\webmaps\basemap\basemap.aprx and K:\webmaps\basemap\taxmap.aprx.
 2. Make sure the map it uses does not have any features selected.
 3. Make sure the data sources are correct, you likely will want the STAGING version for example instead of your personal version or the default.
 
-### Republish vector layers, including all the label layers.
+### Republishing: labels, features, and vector tiles.
 
-In order of usage for a workflow,
+Run scripts in this order as a workflow.
+
+2023-04-03 I am converting these tools to 
+toolboxes so that I can build a model, but we're not there yet.
 
 * **process_basemap_data.py**     status: working  
 This script is used to import data for the basemap services
@@ -154,8 +159,9 @@ Make sure you pull the version you want, typically either from Default or Stagin
 1. Downloads data from the Enterprise GDB to a local FGDB and reprojects it to Web Mercator.  
 2. Processes copied data; unsplits roads and water lines and removes unwanted attributes.
 
-* **process_taxmap_data.py**     status: IN DEVELOPMENT, does not run  
+* **process_taxmap_data.py**     status: runs but still IN DEVELOPMENT 
 Processes data for taxmaps, similar to process_basemap_data.py
+**Currently it just reprojects taxlots into WM.**
 
 * **stage_basemap_services.py**   status: working  
 Uses basemap.aprx file to process feature classes into vector tile maps 
@@ -185,6 +191,8 @@ This was to be used for republishing raster tiles, just here for cold storage.
 ### Republish Roads feature layer
 
 These days "publish_roads.py" is working well, so I think this section is just whining about the bad old days.
+
+https://cpauthentication.civicplus.com/Identity/Account/ResetPassword?Code=Q2ZESjhGcitucnBVbGY1SXJpT0tGbG5hbFV3YWxMa0YzUFk1b3BTUFV1dHVaR1VTczc0S3FBWVkxVmx6cGlWWWxydnh2Z3hmQXdJQldadUc3ZXBJbHVySVZ0TDhWTFJPUHBrdjNFRlJDNUN6TGVJdTVZMEwrNGozYnBydDFWRTNBMG1Wd0tDY1lLZXYvaVMrUUJja2JncU5HY2s5UHJWN1pna2o0MEI5a0thTkx3cFovRHdaS0F5Rmp6emNmSjR1NFM2NzZ1Z0paTkVZS1JqOVhWT2JNODhHdDNsY3FpeUVXWHdiTk1mdHlXMVVjQlc3
 
 1. Run "process_basemap_data.py", to import current data into the local FGDB used here.
 2. Open the basemap project, (k:\webmaps\basemap\basemap.aprx) open the Roads map.

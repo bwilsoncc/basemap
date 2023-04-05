@@ -21,7 +21,7 @@ import arcpy
 from arcgis.gis import GIS
 from datetime import datetime
 from config import Config
-from scripts.portal import PortalContent
+from portal import PortalContent
 
 TEST = True # Generate a test service only.
 TEST = False # Generate real services.

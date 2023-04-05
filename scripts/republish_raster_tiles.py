@@ -1,4 +1,3 @@
-        print("Delete unwanted fields.")
 # Republish raster tiles for a basemap
 
 import sys, os

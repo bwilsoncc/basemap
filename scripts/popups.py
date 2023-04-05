@@ -6,7 +6,7 @@ import os
 import arcpy
 import json
 import subprocess
-from config import Config
+from scripts.config import Config
 
 import subprocess
 BROWSER = "C:/Program Files/Mozilla Firefox/firefox.exe"
