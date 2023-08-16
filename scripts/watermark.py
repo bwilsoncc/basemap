@@ -1,6 +1,8 @@
 """
     Prints text onto an image file.
 
+    I guess it's not a watermark at all since this version is opaque.
+
     This version does a textmark and a caption.
     The "textmark" is the string that goes on the right
     and the coption goes on the bottom.
@@ -11,13 +13,18 @@
     FIXME: likewise, the dimensions of the textboxes are hardcoded in.
 """
 import os
-from PIL import Image, ImageFont, ImageDraw
-from colors import find_dominant_colors # uses opencv
+from PIL import Image, ImageColor, ImageFont, ImageDraw
 
 SYSTEMFONTS = 'C:/Windows/Fonts/'
 
-COUNTY_BACKGROUND_COLOR = ( 62, 125, 135, 255) # county greenish color
-COUNTY_TEXT_COLOR = (255, 255, 255, 255) # white
+COUNTY_TEXTBAR_COLOR = "rgb( 65%, 83%, 91%)" # pale blue
+BLACK = "rgb(0, 0, 0)" # opaque inky black
+WHITE = "rgb(100%, 100%, 100%)"
+
+
+COUNTY_BACKGROUND_COLOR = "rgb( 42%, 57%, 80%)" # darker blue
+COUNTY_BORDER_COLOR = "rgb(97%, 92%, 38%)" # yellow and opaque 
+
 
 def get_target(output_name):
     """ 
@@ -25,7 +32,7 @@ def get_target(output_name):
     """
     output_folder, output_file = os.path.split(output_name)
     file, extn = os.path.splitext(output_file)
-    extn = ".png" # Force all output into PNG format because it supports alpha
+#    extn = ".png" # Force all output into PNG format because it supports alpha
 
     outfile = output_name
     n = 1
@@ -61,17 +68,19 @@ def mark(input_name, output_name, caption="", textmark="", fontname="arial.ttf")
         tm_ymax = min(30, xmax)
         tl_xmax = xmax - tm_ymax
 
-        # find a suitable background color 
-        (box_color, text_color) = find_dominant_colors(input_name)
+        box_color = COUNTY_BACKGROUND_COLOR
+        text_color = WHITE
 
-        tm = Image.new("RGBA", [tm_xmax,tm_ymax])
+        tm = Image.new("RGB", [tm_xmax,tm_ymax])
         d = ImageDraw.Draw(tm)
 
         # make a filled rectangle in the correct colors
         d.rectangle([0,0, tm_xmax,tm_ymax], 
             fill=box_color, outline=None, width=1)
+        
         d.text((tm_xmax/2+2,tm_ymax/2), anchor='mm', 
             text=textmark, fill=text_color, font=font)
+        
         twisted = tm.transpose(Image.ROTATE_90)
 
         # Upper left corner for the textmark
@@ -81,8 +90,8 @@ def mark(input_name, output_name, caption="", textmark="", fontname="arial.ttf")
     if caption:
     # == caption goes across the bottom
         font = ImageFont.truetype(SYSTEMFONTS + fontname, 20)
-        box_color = COUNTY_BACKGROUND_COLOR
-        tl_color  = COUNTY_TEXT_COLOR
+        box_color = COUNTY_TEXTBAR_COLOR
+        tl_color  = BLACK
 
         tl_ymax = min(30, ymax)
         
@@ -125,8 +134,9 @@ if __name__ == "__main__":
     # or from this project's test files.
     #srcdir = os.path.join("k:/webmaps/basemap/assets/")
 
-    myfont = "ARIAL.TTF" # pick something from your fonts
-    for item in os.listdir(srcdir):
+    myfont = "FREESCPT.ttf" # pick something from your fonts
+    for item in ['surveyor.png']: # os.listdir(srcdir):
+
         print(item)
         imgfile = os.path.join(srcdir, item)
 
@@ -140,6 +150,11 @@ if __name__ == "__main__":
 #            if base.is_animated:
 #                return
             path,file = os.path.split(imgfile)
+
+            # Maybe I want output in PNG format
+            f,e = os.path.splitext(file)
+            file = f + '.png'
+
             output_name = os.path.join(scratch_workspace, file)
             outfile = mark(imgfile, output_name, caption, textmark, fontname=myfont)
             print(outfile)

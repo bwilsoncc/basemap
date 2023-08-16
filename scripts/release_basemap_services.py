@@ -22,7 +22,7 @@ import arcpy
 from arcgis.gis import GIS
 from datetime import datetime
 from portal import PortalContent
-from scripts.config import Config
+from config import Config
 
 def replace_service(gis: object, staged_item: str, target_item: str, archive_name: str) -> None:
     """

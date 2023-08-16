@@ -2,10 +2,10 @@
 
 Tools that help build and publish the Clatsop County base layers and maps.
 
-2022-12-15 Added support for taxmaps incl taxlots and annotation
+2022-12-15 Added support for taxmaps incl taxlots and annotation  
 2022-09-15 Currently used with ArcGIS Pro 2.9.4 and ArcGIS Enterprise 10.9.1
 
-I refer to this as "the basemap" but it's actually a group of services including queryable layers and label layers and vector layers. 
+I refer to this as "the basemap" but it's actually a group of services including queryable layers and label layers and vector layers.  It's actually possible to publish it as a basemap but then you can't put it on top of aerials.
 
 Since every Esri map requires a basemap (it defines the projection),
 this project also creates an "Empty basemap", which is a real basemap with a projection, but has no data in it. This makes it load fast.
@@ -18,13 +18,15 @@ so we use feature layers for queries and sometimes for labels.
 In summary, we have these components now:
 
 For the basemap, 
+
 1. "Vector Labels" - the labels only, and a county boundary line, for web maps.
 2. "Roads", containing three feature layers
 3. "Vector Tiles" - everything, useful offline for example in Field Maps.
 4. "Unlabeled Tiles" - feature layers without any labels, for web maps
 5. "Empty basemap" (that's its name.)
 
-For taxmaps,
+For taxmaps, (still in development)
+
 1. Taxlots
 2. Annotation and labels
 2a.   Taxlot Address Labels -
@@ -35,7 +37,7 @@ For taxmaps,
 |--------|----------|---------------------|-----------------|
 | ![Vector labels](assets/vector_reference.PNG) | ![Vectors unlabeled](assets/vector_unlabeled.PNG) | ![Vectors](assets/vector.PNG) | ![Webmap](assets/webmaps.png) |
 
-Here is some advice on [how to author not-awful vector maps](https://pro.arcgis.com/en/pro-app/latest/help/mapping/map-authoring/author-a-map-for-vector-tile-creation.htm).
+Here is a doc on on [how to author vector maps](https://pro.arcgis.com/en/pro-app/latest/help/mapping/map-authoring/author-a-map-for-vector-tile-creation.htm).
 
 The vector datasets also help a lot with Field Maps. They helped with Collector too. (R.I.P.)
 In Field Maps, every map has to have a "real basemap" but I don't want to incur massive downloads and to require a live connection to the Internet.
@@ -46,13 +48,14 @@ First time around, clone the standard Python environment then add things to it.
 If you upgrade Pro then you can upgrade the environment
 but it's probably faster to nuke it and start over.
 
-```bash
-conda env remove --name arcgispro29
-conda create --clone /c/Program\ Files/ArcGIS/Pro/bin/Python/envs/arcgispro-py3 --name arcgispro29
-conda activate arcgispro29
-conda install autopep8
-proswap arcgispro29
-```
+    conda env remove --name arcgispro31
+    conda create --clone /c/Program\ Files/ArcGIS/Pro/bin/Python/envs/arcgispro-py3 --name arcgispro31
+    conda activate arcgispro31
+    conda install autopep8
+
+I used to have a command "proswap arcgispro31" here but I think that has been
+removed in 3.1? You have to make the environment the default in the ArcGIS Pro
+Package Manager now.
 
 ## Regarding the layer order problem in the Esri web map viewer
 
@@ -140,7 +143,7 @@ When building the empty basemap,
 __scripts/__        Scripts for building basemaps and publishing them
 
 The scripts use maps in APRX files, 
-K:\webmaps\basemap\basemap.aprx and K:\webmaps\basemap\taxmap.aprx.
+basemap.aprx and taxmap.aprx.
 
 1. Most settings are in config.py; .env has some secrets in it.
 2. Make sure the map it uses does not have any features selected.
@@ -148,40 +151,47 @@ K:\webmaps\basemap\basemap.aprx and K:\webmaps\basemap\taxmap.aprx.
 
 ### Republishing: labels, features, and vector tiles.
 
-Run scripts in this order as a workflow.
+1. Run scripts in this order as a workflow. 
+2. Run them in the arcgispro31 environment.
+3. Run them from this folder, for example, like this:
+```
+    conda activate arcgispro31
+    python scripts/process_basemap_data.py
+```
+Of course, you can run them in VSCode in the debugger too.
 
 2023-04-03 I am converting these tools to 
 toolboxes so that I can build a model, but we're not there yet.
 
-* **process_basemap_data.py**     status: working  
+* **process_basemap_data.py** -- status: __working__  
 This script is used to import data for the basemap services
 Make sure you pull the version you want, typically either from Default or Staging.  
 1. Downloads data from the Enterprise GDB to a local FGDB and reprojects it to Web Mercator.  
 2. Processes copied data; unsplits roads and water lines and removes unwanted attributes.
 
-* **process_taxmap_data.py**     status: runs but still IN DEVELOPMENT 
+* **process_taxmap_data.py** -- status: runs but still __IN DEVELOPMENT__   
 Processes data for taxmaps, similar to process_basemap_data.py
 **Currently it just reprojects taxlots into WM.**
 
-* **stage_basemap_services.py**   status: working  
+* **stage_basemap_services.py** -- status: __working__  
 Uses basemap.aprx file to process feature classes into vector tile maps 
 and then publishes them on the portal.
 They always get named with timestamp appended; no existing services are overwritten.
 
-* **stage_taxmap_services**:  status: IN DEVELOPMENT, don't do this yet  
+* **stage_taxmap_services**:  status: __IN DEVELOPMENT__, don't do this yet  
 Uses ServicePRO.aprx to do the same things for taxmap services.
 
-* **release_basemap_services.py**  status: working  
+* **release_basemap_services.py**  status: __working__  
 __N.B. -- QA/QC the staged services before running this.__  
 1. If a tile service does not exist, create it
 else replace existing vector tile services.
 2. Controlled by a table near the top of the source file.
 
-* **release_taxmap_services.py**  status: IN DEVELOPMENT  
+* **release_taxmap_services.py**  status: __IN DEVELOPMENT__  
 __N.B. -- QA/QC the staged services before running this.__  
 Similar to release_basemap_services.py
 
-* **publish_roads.py**    status: working (sometimes publish fails for no apparent reason)
+* **publish_roads.py**    status: __working__ (sometimes publish fails for no apparent reason)
 Uses the Roads map in basemap.aprx, uses "share" and overwrite an existing layer.
 This layer is used for queries (popups), which are not currently supported by Esri with vector tiles.
 

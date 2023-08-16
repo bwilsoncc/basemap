@@ -175,11 +175,22 @@ if __name__ == '__main__':
 
     # TODO make all tests assertions.
 
-    from scripts.config import Config
+    from config import Config
     import json
-    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    assert GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    gis = GIS(url=Config.PORTAL_URL, profile=Config.PORTAL_PROFILE)
+    assert gis
     print("Logged in as " + str(gis.properties.user.username))
     pcm = PortalContent(gis)
+
+    items = pcm.findItems(title='Roads')
+    PortalContent.show(items)
+
+    items = pcm.findItems(title='Roads_hosted')
+    PortalContent.show(items)
+
+    items = pcm.findItems(name='Roads_hosted')
+    PortalContent.show(items)
 
     items = pcm.findItems(title='Taxlot_Queries')
     PortalContent.show(items)

@@ -1,14 +1,14 @@
 """
 process_basemap_data.py
 
-2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
+2023-08-16 Tested with Server 10.9.1, ArcGIS Pro 3.1.2
 
 Run this standalone (that is, NOT inside ArcGIS Pro) to download and build feature classes for basemaps
-Runs fast in VS Code or run from Python Idle or some other IDE, 
+Runs fast in VS Code or run from Python Idle or some other IDE.
 
 DON'T run it in Arc Pro in a Jupyter notebook, because first it will throw errors over and over
 and then when you finally get it to run it will tear out the original layer from the map
-and throw away the symbology you spent 3 days working on. You will shed tears.
+and throw away the symbology you spent 3 days working on. I shed tears.
 """
 import sys, os
 import arcpy

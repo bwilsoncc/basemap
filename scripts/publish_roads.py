@@ -14,6 +14,7 @@ from publish_service import BuildSD, PublishFromSD
 from portal import PortalContent
 from config import Config
 
+mapobj = None # hacky stupid hacky hack hack
 class PublishRoads(object):
 
     def __init__(self) -> None:
@@ -27,6 +28,15 @@ class PublishRoads(object):
         return
 
     def getParameterInfo(self) -> list:
+        map  = arcpy.Parameter(
+            name = 'map',
+            displayName = 'Map (drag from Catalog)',
+            datatype = 'GPMap',
+            parameterType='Required',
+            direction = 'Input'
+        )
+ #       map.value = mapobj
+
         initials  = arcpy.Parameter(
             name = 'initials',
             displayName = 'Your initials',
@@ -44,7 +54,7 @@ class PublishRoads(object):
             direction = 'Input'
         )
         textmark.value = datetime.now().strftime("%m/%d/%y %H:%M") + ' ' + initials.value
-        return [initials, textmark]
+        return [map, initials, textmark]
 
     def isLicensed(self) -> bool:
         return True
@@ -57,83 +67,58 @@ class PublishRoads(object):
 
     def execute(self, params, messages) -> None:
 
-        # UGH, this is wrong, fix
-        arcpy.env.workspace = Config.SCRATCH_WORKSPACE
-        gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-        portal = PortalContent(gis)
-        print("Logged in as %s" % str(portal.gis.properties.user.username))
-        try:
-            aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
-        except Exception as e:
-            print("Can't open APRX file,", e)
-            return
+        global gis
 
-        initials = params[0].value
-        textmark = params[1].value
+        map = params[0].value
+
+        # THIS ONLY WORKS IN THE COMNMAND LINE,
+        # the parameter setting Esri provides is not a map object so it fails here.
+
+        global mapobj
+        if mapobj:
+            map = mapobj
+        initials = params[1].value
+        textmark = params[2].value
         
         script_url = f'{Config.GIT_BASE}blob/main/scripts/{self.scriptname}'
-        description = f"""<p>Project file: <a href="file:///{aprx.filePath}">{aprx.filePath}</a><br />
+        aprx_link = '' # 'Project file: <a href="file:///{aprx.filePath}">{aprx.filePath}</a><br />'
+        description = f"""<p>{aprx_link}
                 {Config.DOC_LINK} Script: <a href="{script_url}{self.scriptname}">{self.scriptname}</a><br />
                 <em>Updated {textmark}</p></em>"""
-        maps = [
-            {
-                "name": "Roads",
-                "servicename": "Roads_Test",
-                "description": description,
-                "folder": "Public Works", 
-                "pkgname": "Roads",
-                "copyData": False,
-                "makeFeatures": False, # also make feature service | only make the MIL
-            },
-            {
-                "name": "Roads",
-                "servicename": "Roads_Test",
-                "description": description,
-                "folder": "Public Works", 
-                "pkgname": "Roads_registered",
-                "copyData": False,
-                "makeFeatures": False, # also make feature service | only make the MIL
-            },
-            {
-                "name": "Roads",
-                "servicename": "Roads_Test",
-                "description": description,
-                "folder": "Public Works", 
-                "pkgname": "Roads_registered_features",
-                "copyData": False,
-                "makeFeatures": True, # also make feature service | only make the MIL
-            },
-            {
-                "name": "Roads",
-                "servicename": "Roads_Test",
-                "description": description,
-                "folder": "Public Works", 
-                "pkgname": "Roads_copied",
-                "copyData": True,
-                "makeFeatures": False, # also make feature service | only make the MIL
-            },
-            {
-                "name": "Roads",
-                "servicename": "Roads_Test",
-                "description": description,
-                "folder": "Public Works", 
-                "pkgname": "Roads_copied_features",
-                "copyData": True,
-                "makeFeatures": True, # also make feature service | only make the MIL
-            },
-        ]
+        
+        title = "Roads_hosted_test" # Set this to a different name when testing.
+        #title = "Roads" # The official name
 
-        for mapd in maps:
-            map = aprx.listMaps(mapd['name'])[0]
-            try:
-                sd_file = BuildSD(map, mapd)
-            except Exception as e:
-                print(e)
-                # Perhaps analysis failed?
-                continue
-            #PublishFromSD(gis, map, mapd, sd_file)
+        mapd = {
+                "name": "Roads",
+                "title": title,
+                "pkgname": title,
+                "description": description,
+                "folder": "Public Works", # server folder
+                "copyData": True, # This is "hosted" data
+                "makeFeatures": False, # also make feature service | only make the MIL
+        }
+        
+        # Don't need this until actually publishing to the server
+        gis = None # Testing build stage without publishing
+        gis = GIS(url=Config.PORTAL_URL, profile=Config.PORTAL_PROFILE)
+        
+        workspace = arcpy.env.workspace
 
-            return
+        arcpy.AddMessage(mapd["title"])
+        arcpy.AddMessage(f"Our map: {type(map)}")
+        try:
+            sd_file = os.path.join(workspace, mapd["pkgname"] + ".sd")
+            if not os.path.exists(sd_file): # for testing, recycle existing file
+                BuildSD(map, mapd, sd_file)
+        except Exception as e:
+            arcpy.AddMessage(e)
+            # Perhaps analysis failed?
+
+        if gis: # for testing don't publish if None
+            PublishFromSD(gis, map, mapd, sd_file, textmark)
+        
+        return
     
 # ==========================================================================
 if __name__ == "__main__":
@@ -141,11 +126,16 @@ if __name__ == "__main__":
         def addMessage(self, message: str) -> None:
             print(message)
             return
- 
-    print(os.getcwd())
+
+    arcpy.env.workspace = Config.SCRATCH_WORKSPACE
 
     pubroads = PublishRoads()
     params = pubroads.getParameterInfo()
+ 
+    aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
+    mapobj = aprx.listMaps('Roads')[0]
+    params[0].value = mapobj # This, quite simply, fails.
+
     pubroads.execute(params, Messenger)
 
     print("All done!!!")

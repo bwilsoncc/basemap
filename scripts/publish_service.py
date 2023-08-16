@@ -8,13 +8,14 @@ import os, sys
 import datetime
 import arcpy
 from arcgis.gis import GIS
-from scripts.portal import PortalContent
-from scripts.popups import makePopup
+from portal import PortalContent
+from popups import makePopup
 import xml.dom.minidom as DOM
 from xml_utils import EnableFeatureLayers, ConfigureFeatureserverCapabilities
 import json
 sys.path.insert(0,'')
 from config import Config
+from watermark import mark
 
 
 def enable_feature_service(sddraft: str, sddraft_new: str) -> None:
@@ -74,15 +75,14 @@ def show(id: str) -> None:
     return
 
 
-def BuildSD(map: object, mapd: dict) -> None:
+def BuildSD(map: object, mapd: dict, sd_file: str) -> None:
     """
-    Build an SD file.
+    Build an SD file called "sd_file".
     If features=True, creates a Feature Service (aka "Feature Layer Collection") with same name.
     """
-    sd_file = os.path.join(Config.SCRATCH_WORKSPACE, mapd["pkgname"] + ".sd")
-    print(f'Building \"{sd_file}\".')    
+    arcpy.AddMessage(f'Building \"{sd_file}\".')    
 
-    map.clearSelection() # I wonder if this works?
+    #map.clearSelection() # This does not work
 
     # https://pro.arcgis.com/en/pro-app/2.9/help/sharing/overview/automate-sharing-web-layers.htm
 
@@ -102,8 +102,9 @@ def BuildSD(map: object, mapd: dict) -> None:
     # https://pro.arcgis.com/en/pro-app/2.9/arcpy/sharing/mapimagesharingdraft-class.htm
 
     # in theory this is redundant since it's also defined in the upload step.
-    # fails if not defined
-    sddraft.federatedServerUrl = Config.SERVER_AGS # Using an URL here fails.
+    # fails if not defined with an error of "Missing target server"
+    #sddraft.federatedServerUrl = Config.SERVER_AGS # Using an URL here fails sometimes. Other times this gives me login errors.
+    sddraft.federatedServerUrl = Config.SERVER_URL # 2023-04-07 use this
 
     sddraft.copyDataToServer = mapd['copyData'] # This only matters if the data source in the map is registered. Other data is always copied.
     sddraft.overwriteExistingService = True # THIS FAILS IF THE SD FILE EXISTS
@@ -143,39 +144,48 @@ def BuildSD(map: object, mapd: dict) -> None:
         print("wrote", sddraft_with_features)
         sddraft_file = sddraft_with_features
         
-    print("Staging = analyse definition then build", sd_file)
+    arcpy.AddMessage(f"Staging: analyze definitions in sddraft file, then build \"{sd_file}\".")
     try:
         # "Stage" is the Esri verb for "archive with 7Z".
         # The 7z file contains a FGDB and various settings. If you asked for hosted data, a copy of the data will be in the FGDB.
         if os.path.exists(sd_file): os.unlink(sd_file)
         arcpy.server.StageService(sddraft_file, sd_file)
     except Exception as e:
-        print("ERROR:", e)
-        """ERROR: ERROR 001272: Analyzer errors were encountered 
-        ([
+        arcpy.AddMessage(e)
+        """
+        Some of our favorites include
+
+        'ERROR 001272: Analyzer errors were encountered ([
+            {"code":"00102","message":"Map does not contain a required layer type for Map Service","object":"Roads"}]).
+            Failed to execute (StageService).'
+
+        ERROR: ERROR 001272: Analyzer errors were encountered ([
             {"code":"00231","message":"Layer's data source must be registered with the server","object":"Roads (popups)"},
             {"code":"00231","message":"Layer's data source must be registered with the server","object":"Trails (popups)"},
             {"code":"00231","message":"Layer's data source must be registered with the server","object":"Roads by Jurisdiction"}]).
-        Failed to execute (StageService)."""
+        Failed to execute (StageService).
+        
+        ERROR 00102
+        ([{"code":"00102","message":"Map does not contain a required layer type for Map Service","object":"Roads"}])
+        See https://pro.arcgis.com/en/pro-app/latest/help/sharing/analyzer-error-messages/00102-does-not-contain-a-required-layer-type-for-capability.htm
+
+        """
         raise e
 
-    return sd_file
+    return
 
 
-def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str) -> None:
+def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str, textmark: str) -> None:
     """
     Upload the service definition to the SERVER
     This will overwrite an existing service
     or publish a new one.
     """
-    servicename = mapd['name'].replace(' ', '_')
-    if 'servicename' in mapd:
-        servicename = mapd['servicename']
-
-    print(f'Uploading sd file to "{mapd["folder"]}" folder (which does not work BTW).')
+    arcpy.AddMessage(f'Uploading sd file {sd_file} to "{mapd["folder"]}" folder.')
 
     portal = PortalContent(gis)
-    username = os.environ.get("USERNAME")
+    username = os.environ.get("USERNAME") # For comments
+    workspace = arcpy.env.workspace
 
     # Validate the group list
     release_groups = portal.getGroups(Config.RELEASE_GROUP_LIST)
@@ -184,53 +194,77 @@ def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str) -> None:
     # https://pro.arcgis.com/en/pro-app/latest/tool-reference/server/upload-service-definition.htm
     # You can override permissions, ownership, groups here too.
     # in_startupType HAS TO BE "STARTED" else no service is started on the SERVER.
-    rval = arcpy.SignInToPortal(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
 
-    # It's possible to set up sharing here too.
-    rval = arcpy.server.UploadServiceDefinition(in_sd_file=sd_file, in_server=Config.SERVER_AGS, in_service_name=servicename, in_startupType="STARTED")
+    # "IWA" DOES NOT WORK HERE, It JUST DEMANDS USERNAME AND PASSWORD NO MATTER WHAT
+    result = arcpy.SignInToPortal(portal_url=Config.PORTAL_URL, username=Config.PORTAL_USER, password=Config.PORTAL_PASSWORD)
 
-    # Update sharing.
-    # Skipping this step bit me, (2023-02-09) because suddenly everyone had to log in. (The service was not accessible by Everyone.)
+    # SETTING THE PERMISSIONS HERE APPEARS TO FAIL.
 
-    mil_item = portal.getServiceItem(title=mapd["name"], type=portal.MapImageLayer)
+    result = arcpy.server.UploadServiceDefinition(in_sd_file=sd_file,
+                in_server=Config.SERVER_AGS, in_startupType="STARTED",
+#??             in_my_contents='SHARE_ONLINE',
+#fails          in_public='PUBLIC', # This shares with EVERYONE, probably what I want 99% of the time.
+#fails          in_organization='SHARE_ORGANIZATION',
+#fails          in_groups=release_groups
+    )
+    # All about "result" https://pro.arcgis.com/en/pro-app/latest/arcpy/classes/result.htm
+    arcpy.AddMessage(f'Uploaded. Status={result.status} Messages={result.messageCount}.')
+    count = result.outputCount
+    for i in range(count):
+        out = result.getOutput(i)
+        if out: print(i, out)
+    print(arcpy.GetMessages())
 
-    # Fix the extent of the service(s), not sure if this is needed.
-    # Once you have loaded the layer in Map Viewer, use "Zoom to".
+    mil_item = portal.getServiceItem(title=mapd["title"], type=portal.MapImageLayer) # Assuming we published a MIL.
+    # should 17209289b3f642ebaa545ef3ab5a5f66
+
+    # Fix the extent of the service(s), not sure if this is needed, it's hard to tell if it's overwriting or not.
+    # I tried loading the extent from the map, but
+    # it shows up in the wrong coord space so I ignore it.
+    # Once you have loaded the layer in Map Viewer, use "Zoom to" to test it.
     cimMap = map.getDefinition('V2')
     j = arcpy.cim.GetJSONForCIMObject(cimMap.defaultExtent, 'V2')
     defaultMapExtent = json.loads(j)
+    print("Current map extent is", defaultMapExtent)
+    defaultMapExtent = {'xmin': -124.1, 'xmax': -123.35,   'ymin': 45.77, 'ymax': 46.3}
     extentProperty = [
         [defaultMapExtent['xmin'], defaultMapExtent['ymin']],
         [defaultMapExtent['xmax'], defaultMapExtent['ymax']]
     ]
-    print("Default map extent is", extentProperty)
+    print("Extent property is currently", mil_item.extent) 
+    #mil_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })
 
     # There's an Esri bug, it fails to write the popup settings,
     # so I coded around it. This generates the JSON. It will get written later.
     popupDict = makePopup(map.listLayers())
     # For debugging, dump to a file as JSON
-#    json_file = os.path.join(Config.SCRATCH_WORKSPACE, mapd["pkgname"] + ".json")
-#    with open(json_file, 'w') as fp:
-#        json.dump(popupDict, fp, indent=2)
+    json_file = os.path.join(workspace, mapd["pkgname"] + ".json")
+    with open(json_file, 'w') as fp:
+        json.dump(popupDict, fp, indent=2)
 
-    print("Current extent", mil_item.extent) 
+    print("Setting popup", mil_item.extent) 
     mil_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })
 
     print("Setting status to authoritative")
     mil_item.content_status = 'authoritative'
+
     print("Marking as 'do not delete'.")
     mil_item.protect(enable=True)
-    print("Setting sharing.")
+
+    # Update sharing. I think when I called this to fix groups without the "everyone" and "org" settings
+    # they were defaulting to False, undoing whatever I did in the UploadServiceDefinition call.
+    # https://developers.arcgis.com/python/api-reference/arcgis.gis.toc.html#arcgis.gis.Item.share
+    print("Set group members to edit.")
     mil_item.share(everyone=True, org=True, groups=release_groups, allow_members_to_edit=True)
 
     # Add a comment to the service
-    # Comments will log whoever ran the script and when. They can't use HTML
+    # Comments will log whoever ran the script and when. Note, they can't contain HTML
     print("Adding comment.")
-    mil_item.add_comment(f"Updated as {username}.")
+    mil_item.add_comment(f"Updated {textmark}.")
     show(mil_item.id)
 
-    print("features")
     if mapd['makeFeatures']:
+        arcpy.AddMessage("Publishing feature layer.")
         fl_item = portal.getServiceItem(title=mapd["name"], type=portal.FeatureService)
         if fl_item:
             fl_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })

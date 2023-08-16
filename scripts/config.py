@@ -5,7 +5,6 @@ from xml.sax.handler import feature_namespace_prefixes
 # so look in ~/.conda/envs/covid/etc/conda/activate.d/env_vars.sh
 # to see how it is set up.
 
-
 class Config(object):
     """ Read environment here to create configuration data. """
 
@@ -16,10 +15,7 @@ class Config(object):
 
     TAXLOTS_LYRX = os.environ.get("TAXLOT_LYRX") or "Taxmaps\\Taxlots.lyrx"
     PORTAL_URL = os.environ.get('PORTAL_URL') or "https://delta.co.clatsop.or.us/portal"
-
-    CHAT_USER="bwilson"
-    CHAT_PASSWORD = os.environ.get("PORTAL_PASSWORD")
-    CHAT_SERVER = "https://chat.clatsopcounty.gov" 
+    SERVER_URL = os.environ.get('SERVER_URL') or "https://delta.co.clatsop.or.us/server"
 
     # This is a server connection file set up with enough permission to write to the ArcGIS Server.
     SERVER_AGS = os.environ.get('SERVER_AGS') or "server_on_delta.ags"
@@ -49,6 +45,7 @@ class Config(object):
     if not os.path.exists(SCRATCH_WORKSPACE):
         SCRATCH_WORKSPACE = os.environ["TEMP"]
 
+    PORTAL_PROFILE = os.environ.get('PORTAL_PROFILE')
     PORTAL_USER = os.environ.get('PORTAL_USER')
     PORTAL_PASSWORD = os.environ.get('PORTAL_PASSWORD')
 
@@ -72,8 +69,16 @@ Clatsop County is not responsible for any map errors, possible misuse, or misint
 if __name__ == "__main__":
 
     assert Config.PORTAL_URL
+    assert Config.SERVER_URL
+    assert Config.PORTAL_PROFILE
     assert Config.PORTAL_USER
     assert Config.PORTAL_PASSWORD
+    
+    from arcgis.gis import GIS
+    # This works but so what, we have to store the PASSWORD to log in via arcpy too.
+#    gis = GIS(url=Config.PORTAL_URL, profile=Config.PORTAL_PROFILE)
+    gis = GIS(url=Config.PORTAL_URL, username=Config.PORTAL_USER, password=Config.PORTAL_PASSWORD)
+    print(gis.properties.user.fullName)
 
     assert os.path.exists(Config.SERVER_AGS)
     assert Config.SCRATCH_WORKSPACE
