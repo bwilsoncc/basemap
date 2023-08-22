@@ -1,6 +1,7 @@
 """
 stage_basemap_services.py
 
+2023-08-22 Tested with Server 10.9.1, ArcGIS Pro 3.1.2
 2022-09-15 Tested with Server 10.9.1, ArcGIS Pro 2.9.4
 
 Builds the "basemap" vector tiles and stages them to the server.
@@ -25,6 +26,10 @@ from watermark import mark
 #TEST = True # Generate a test service only.
 TEST = False # Generate real services.
 
+PACKAGE_THUMBNAIL = "W:/ALL/GIS/Projects/Images/Services_thumbnails/package.png"
+COUNTY_THUMBNAIL = "W:/ALL/GIS/Projects/Images/Services_thumbnails/clatsopcounty_plus_logo.png"
+assert(os.path.exists(PACKAGE_THUMBNAIL))
+assert(os.path.exists(COUNTY_THUMBNAIL))
 
 class StageBasemapServices(object):
 
@@ -135,9 +140,10 @@ def upload_tile_package(portal, pkgname, pkgfile, description, overwrite=True):
         print("Upload did not work for %s!" % pkgname, e)
         return None
 
-    thumbnail = "assets/package_thumbnail.jpg"
+    thumbnail = PACKAGE_THUMBNAIL
     outname = os.path.join(Config.SCRATCH_WORKSPACE, 'package_thumbnail.png')
     pkg_thumbnail = mark(thumbnail, outname, caption="Basemap", textmark="Package File")
+
     pkg_item.update(
         item_properties = {
             "title": snippet,
@@ -218,7 +224,7 @@ def stage_tile_service(portal, pkg_item, pkgname, description, overwrite=True):
         PortalContent.show(items)
         return None
 
-    thumbnail = "assets/clatsopcounty_thumbnail.png"
+    thumbnail = COUNTY_THUMBNAIL
     outname = os.path.join(Config.SCRATCH_WORKSPACE, 'layer_thumbnail.png')
     lyr_thumbnail = mark(thumbnail, outname, caption="Basemap", textmark="Vector Tiles")
     lyr_item.update(
@@ -283,19 +289,22 @@ if __name__ == "__main__":
                 "description": """<p>This layer is optimized for use in Collector and Field Maps; use it as a basemap for offline field work.
         It includes both the labels and the features in one vector tile layer.</p>"""
                 + layer_desc + project_desc,
-                "min_zoom": Config.MIN_COUNTY_ZOOM
+                "min_zoom": Config.MIN_COUNTY_ZOOM,
+                "ignore": False, # Set to True to skip rebuilding this map.
             },
             {
                 "mapname": Config.LABEL_MAP, 
                 "description": """<p>This layer contains only labels and the county boundary. Use it as a reference layer.</p>""" 
                 + layer_desc + project_desc,
-                "min_zoom": Config.MIN_COUNTY_ZOOM
+                "min_zoom": Config.MIN_COUNTY_ZOOM,
+                "ignore": False, # Set to True to skip rebuilding this map.
             },
             {
                 "mapname": Config.FEATURE_MAP, 
                 "description": """<p>This layer is contains the shapes only, no labels. Use it above a basemap.</p>""" 
                 + layer_desc + project_desc,
-                "min_zoom": Config.MIN_COUNTY_ZOOM
+                "min_zoom": Config.MIN_COUNTY_ZOOM,
+                "ignore": False, # Set to True to skip rebuilding this map.
             },
 
         ]
@@ -306,57 +315,58 @@ if __name__ == "__main__":
 
     # Validate the group list
     staging_groups = pc.getGroups(Config.STAGING_GROUP_LIST)
-    total = len(mapnames)
 
-    print("Building vector tile packages.")
-    n = 0
+    progress = 0
+    total = len(mapnames)
     for item in mapnames:
         mapname = item["mapname"]
+        progress += 1
+
         item["pkgname"] = mapname.replace(' ', '_')
-        n += 1
-        progress = "%d/%d" % (n, total)
-        
+        pkgname = item["pkgname"]
+
+        if item['ignore'] : 
+            print(f"{progress}/{total} Skipping \"{mapname}\". \"ignore\" option is set.")
+            continue
+        print(f"{progress}/{total} \"{mapname}\" => \"{pkgname}\".")
+         
         map = find_map(aprx, mapname)
         if not map:
-            print("ERROR! Map not found in APRX. Skipping \"%s\"." % mapname)
+            print("    ERROR! Map not found in APRX. Skipping \"%s\"." % mapname)
             continue
 
+        print("    Building package.")
         try:
-            print(progress, "Building \"%s\"." % item["pkgname"])
             # When debugging the publish step you can change overwrite to False
             # so you don't have to wait each iteration for the package build step.
             # Don't forget to change it back!!!
-            item["pkgfile"] = build_tile_package(map, item["pkgname"], 
+            item["pkgfile"] = build_tile_package(map, pkgname, 
                                                  min_zoom=item["min_zoom"], 
                                                  overwrite=True)
         except Exception as e:
-            print("Could not generate tiles.", e)
+            print("   Could not generate tiles.", e)
             if e.args[0].startswith("ERROR 001117"):
-                print("ERROR. You need to open the APRX file in ArcGIS Pro and put a description in \"%s\"." % mapname)
-                print("Skipping \"%s\"." % mapname)
+                print("   ERROR. You need to open the APRX file in ArcGIS Pro and put a description in \"%s\"." % mapname)
             item['pkgfile'] = ''
+            print("   Skipping \"%s\"." % mapname)
             continue
-    print("Build completed.")
 
-    n = 0
-    for item in mapnames:
-        pkgname = item["pkgname"]
-        pkgfile = item["pkgfile"]
-        n += 1
-        progress = "%d/%d" % (n, total)
-
-        print(f"{progress} Uploading tile package. {pkgfile}")
-        pkg_item = upload_tile_package(gis, pkgname, pkgfile, item["description"], overwrite=True)
+        print("    Uploading tile package to server.")
+        pkg_item = upload_tile_package(gis, pkgname, item['pkgfile'], item["description"], overwrite=True)
         if not pkg_item: continue
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.
         res = pkg_item.share(everyone=False, org=False, groups=staging_groups, allow_members_to_edit=True)
 
-        print(f"{progress} Staging service. {pkgname}")
+        print("    Staging service.")
         lyr_item = stage_tile_service(gis, pkg_item, pkgname, item["description"], overwrite=True)
-        if not lyr_item: continue
+        if not lyr_item: 
+            print("   Service could not be staged.")
+            continue
+
         # NB if you don't set "allow_members_to_edit" True then groups=groups will fail.
         res = lyr_item.share(everyone=False, org=False, groups=staging_groups, allow_members_to_edit=True)
         url = Config.PORTAL_URL + f"/home/item.html?id={lyr_item.id}"
-        print(f"    Published as {lyr_item.homepage}")
+        print(f"Published at {lyr_item.homepage}")
+        print("")
 
-    print("All done!!!")
+    print("All done.")

@@ -175,17 +175,23 @@ def BuildSD(map: object, mapd: dict, sd_file: str) -> None:
     return
 
 
-def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str, textmark: str) -> None:
+def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str, thumbnail: str, caption: str, textmark: str) -> None:
     """
     Upload the service definition to the SERVER
     This will overwrite an existing service
     or publish a new one.
+
+    Returns the arcgis "item".
     """
-    arcpy.AddMessage(f'Uploading sd file {sd_file} to "{mapd["folder"]}" folder.')
+    arcpy.AddMessage('Connecting to Portal.')
 
     portal = PortalContent(gis)
     username = os.environ.get("USERNAME") # For comments
     workspace = arcpy.env.workspace
+
+    # Do this now instead of failing later when it turns out the TN is not there...
+    tn_target = os.path.join(workspace, "thumbnail.png")
+    tn = mark(thumbnail, tn_target, caption=caption, textmark=textmark)
 
     # Validate the group list
     release_groups = portal.getGroups(Config.RELEASE_GROUP_LIST)
@@ -198,25 +204,31 @@ def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str, textmark: str
     # "IWA" DOES NOT WORK HERE, It JUST DEMANDS USERNAME AND PASSWORD NO MATTER WHAT
     result = arcpy.SignInToPortal(portal_url=Config.PORTAL_URL, username=Config.PORTAL_USER, password=Config.PORTAL_PASSWORD)
 
-    # SETTING THE PERMISSIONS HERE APPEARS TO FAIL.
+    arcpy.AddMessage(f'Uploading sd file {sd_file} to "{mapd["folder"]}" folder.')
 
-    result = arcpy.server.UploadServiceDefinition(in_sd_file=sd_file,
-                in_server=Config.SERVER_AGS, in_startupType="STARTED",
-#??             in_my_contents='SHARE_ONLINE',
-#fails          in_public='PUBLIC', # This shares with EVERYONE, probably what I want 99% of the time.
-#fails          in_organization='SHARE_ORGANIZATION',
-#fails          in_groups=release_groups
-    )
-    # All about "result" https://pro.arcgis.com/en/pro-app/latest/arcpy/classes/result.htm
-    arcpy.AddMessage(f'Uploaded. Status={result.status} Messages={result.messageCount}.')
-    count = result.outputCount
-    for i in range(count):
-        out = result.getOutput(i)
-        if out: print(i, out)
-    print(arcpy.GetMessages())
+    # SETTING THE PERMISSIONS HERE APPEARS TO FAIL.
+    # Docs https://pro.arcgis.com/en/pro-app/latest/tool-reference/server/upload-service-definition.htm
+    try:
+        result = arcpy.server.UploadServiceDefinition(in_sd_file=sd_file,
+                    in_server=Config.SERVER_AGS, in_startupType="STARTED",
+    #??             in_my_contents='SHARE_ONLINE',
+    #fails          in_public='PUBLIC', # This shares with EVERYONE, probably what I want 99% of the time.
+    #fails          in_organization='SHARE_ORGANIZATION',
+    #fails          in_groups=release_groups
+        )
+
+        # All about "result" https://pro.arcgis.com/en/pro-app/latest/arcpy/classes/result.htm
+        arcpy.AddMessage(f'Uploaded. Status={result.status} Messages={result.messageCount}.')
+        count = result.outputCount
+        for i in range(count):
+            out = result.getOutput(i)
+            if out: print(i, out)
+        print(arcpy.GetMessages())
+    except Exception as e:
+        arcpy.AddError(e)
 
     mil_item = portal.getServiceItem(title=mapd["title"], type=portal.MapImageLayer) # Assuming we published a MIL.
-    # should 17209289b3f642ebaa545ef3ab5a5f66
+    # should reference 17209289b3f642ebaa545ef3ab5a5f66
 
     # Fix the extent of the service(s), not sure if this is needed, it's hard to tell if it's overwriting or not.
     # I tried loading the extent from the map, but
@@ -226,13 +238,19 @@ def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str, textmark: str
     j = arcpy.cim.GetJSONForCIMObject(cimMap.defaultExtent, 'V2')
     defaultMapExtent = json.loads(j)
     print("Current map extent is", defaultMapExtent)
-    defaultMapExtent = {'xmin': -124.1, 'xmax': -123.35,   'ymin': 45.77, 'ymax': 46.3}
+
+    # This needs to be in the projection for the service, which is EPSG:3857
+    #defaultMapExtent = {'xmin': -124.1, 'xmax': -123.35,   'ymin': 45.77, 'ymax': 46.3}
+    defaultMapExtent = {'xmin': -13814748.807445249, 'xmax': -13731259.189350294,
+                        'ymin':   5743567.855452993, 'ymax':   5828555.457219464}
     extentProperty = [
         [defaultMapExtent['xmin'], defaultMapExtent['ymin']],
         [defaultMapExtent['xmax'], defaultMapExtent['ymax']]
     ]
-    print("Extent property is currently", mil_item.extent) 
-    #mil_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })
+    print("Extent will be set to", defaultMapExtent)
+
+    # If you open the Roads layer in a map viewer, you'll see it at Null Island
+    # but if you Zoom To in the layer, it will change to Clatsop County.
 
     # There's an Esri bug, it fails to write the popup settings,
     # so I coded around it. This generates the JSON. It will get written later.
@@ -242,25 +260,47 @@ def PublishFromSD(gis: GIS, map: object, mapd: dict, sd_file: str, textmark: str
     with open(json_file, 'w') as fp:
         json.dump(popupDict, fp, indent=2)
 
-    print("Setting popup", mil_item.extent) 
-    mil_item.update(item_properties = { 'text' : popupDict, 'extent': extentProperty })
-
     print("Setting status to authoritative")
-    mil_item.content_status = 'authoritative'
+    try:
+        mil_item.content_status = 'authoritative'
+    except Exception as e:
+        arcpy.AddMessage('Could not mark as authoritative.')
+        arcpy.AddMessage(e)
 
     print("Marking as 'do not delete'.")
-    mil_item.protect(enable=True)
+    try:
+        mil_item.protect(enable=True)
+    except Exception as e:
+        arcpy.AddMessage('Could not mark as "no delete".')
+        arcpy.AddMessage(e)
 
     # Update sharing. I think when I called this to fix groups without the "everyone" and "org" settings
     # they were defaulting to False, undoing whatever I did in the UploadServiceDefinition call.
     # https://developers.arcgis.com/python/api-reference/arcgis.gis.toc.html#arcgis.gis.Item.share
     print("Set group members to edit.")
-    mil_item.share(everyone=True, org=True, groups=release_groups, allow_members_to_edit=True)
+    try:
+        mil_item.share(everyone=True, org=True, groups=release_groups, allow_members_to_edit=True)
+    except Exception as e:
+        arcpy.AddMessage('Could not set groups.')
+        arcpy.AddMessage(e)
+
+    print("Setting popup and thumbnail") 
+    try:
+        mil_item.update(item_properties = {'text' : popupDict, 'extent': extentProperty}, thumbnail=tn)
+    except Exception as e:
+        arcpy.AddMessage('Could not add popup.')
+        arcpy.AddMessage(e)
+    os.unlink(tn) # Get rid of the marked up thumbnail.
 
     # Add a comment to the service
     # Comments will log whoever ran the script and when. Note, they can't contain HTML
     print("Adding comment.")
-    mil_item.add_comment(f"Updated {textmark}.")
+    try:
+        mil_item.add_comment(f"Updated {textmark}.")
+    except Exception as e:
+        arcpy.AddMessage('Could not add comment.')
+        arcpy.AddMessage(e)
+
     show(mil_item.id)
 
     if mapd['makeFeatures']:

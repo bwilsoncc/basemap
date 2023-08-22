@@ -1,14 +1,21 @@
 """
     Prints text onto an image file.
 
+    This is used to put text blocks onto thumbnails used in ArcGIS Portal.
+    It will accept any image size but Esri recommands 600x400 so it's optimized
+    for that. In the UI they are shrunken to 200x133.
+
     I guess it's not a watermark at all since this version is opaque.
 
     This version does a textmark and a caption.
     The "textmark" is the string that goes on the right
-    and the coption goes on the bottom.
+    and the "coption" goes on the bottom.
 
-    FIXME: font sizes are hardcoded in, and probably need to be 
-    adjusted whenever you switch fonts.
+    FIXME: colors are hardcoded.
+    
+    FIXME: fonts and font sizes are hardcoded in, and probably need to be 
+    adjusted whenever you switch fonts or image sizes.
+    That is why I settled on using 600x400 images as the standard.
 
     FIXME: likewise, the dimensions of the textboxes are hardcoded in.
 """
@@ -21,9 +28,11 @@ COUNTY_TEXTBAR_COLOR = "rgb( 65%, 83%, 91%)" # pale blue
 BLACK = "rgb(0, 0, 0)" # opaque inky black
 WHITE = "rgb(100%, 100%, 100%)"
 
-
 COUNTY_BACKGROUND_COLOR = "rgb( 42%, 57%, 80%)" # darker blue
 COUNTY_BORDER_COLOR = "rgb(97%, 92%, 38%)" # yellow and opaque 
+
+CAPTION_FONTSIZE = 40
+TEXTBAR_FONTSIZE = 30
 
 
 def get_target(output_name):
@@ -49,6 +58,8 @@ def mark(input_name, output_name, caption="", textmark="", fontname="arial.ttf")
         Writes the new image to "output_name".
         The name of the output file will be the same unless there's already a file there
         in which case it does the numbered suffix thing (eg "myfile.jpg" -> "myfile(3).jpg")
+    
+        Returns the actual output name
     """
     (path, filename) = os.path.split(input_name)
 
@@ -58,14 +69,14 @@ def mark(input_name, output_name, caption="", textmark="", fontname="arial.ttf")
 
     if textmark:
     # == textmark goes sideways on the right ==
-        font = ImageFont.truetype(SYSTEMFONTS + fontname, 18)
+        font = ImageFont.truetype(SYSTEMFONTS + fontname, TEXTBAR_FONTSIZE)
 
         # find text image size
         # Remember output box is rotated 90 degrees
         bbox = font.getbbox(caption)
 
         tm_xmax = ymax # full height
-        tm_ymax = min(30, xmax)
+        tm_ymax = min(TEXTBAR_FONTSIZE+10, xmax)
         tl_xmax = xmax - tm_ymax
 
         box_color = COUNTY_BACKGROUND_COLOR
@@ -89,11 +100,11 @@ def mark(input_name, output_name, caption="", textmark="", fontname="arial.ttf")
 
     if caption:
     # == caption goes across the bottom
-        font = ImageFont.truetype(SYSTEMFONTS + fontname, 20)
+        font = ImageFont.truetype(SYSTEMFONTS + fontname, CAPTION_FONTSIZE)
         box_color = COUNTY_TEXTBAR_COLOR
         tl_color  = BLACK
 
-        tl_ymax = min(30, ymax)
+        tl_ymax = min(CAPTION_FONTSIZE+10, ymax)
         
         tl = Image.new("RGBA", [tl_xmax,tl_ymax])
         d = ImageDraw.Draw(tl)
@@ -130,12 +141,12 @@ if __name__ == "__main__":
 
     # Choose one,
     # pull everything from your Pictures folder...
-    srcdir = os.path.join(os.environ.get('USERPROFILE'), "Pictures")
+    #srcdir = os.path.join(os.environ.get('USERPROFILE'), "Pictures")
     # or from this project's test files.
-    #srcdir = os.path.join("k:/webmaps/basemap/assets/")
+    srcdir = os.path.join("assets/")
 
     myfont = "FREESCPT.ttf" # pick something from your fonts
-    for item in ['surveyor.png']: # os.listdir(srcdir):
+    for item in ['package_thumbnail.png', 'clatsopcounty_thumbnail.png', 'roads_thumbnail.png']: # os.listdir(srcdir):
 
         print(item)
         imgfile = os.path.join(srcdir, item)

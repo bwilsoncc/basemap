@@ -217,7 +217,7 @@ def find_my_layers(m : arcpy._mp.Map, workspace: str) -> dict:
     try:
         # Basemaps data
         layers['roads'] = {"layer": m.listLayers('Roads')[0], "dest": workspace}
-        layers['trail'] = {"layer": m.listLayers('Trails')[0], "dest": workspace}
+        layers['trails'] = {"layer": m.listLayers('Trails')[0], "dest": workspace}
         layers['water_lines'] = {"layer": m.listLayers('Water lines')[0], "dest": workspace}
         layers['water_polygons'] = {"layer": m.listLayers('Water polygons')[0], "dest": workspace}
         layers['parks'] = {"layer": m.listLayers('Parks')[0], "dest": workspace}

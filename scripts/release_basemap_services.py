@@ -3,6 +3,7 @@ release_basemap_services.py
 
 This script will finalize the release of the basemap vector tile services.
 
+2023-08-16 Tested with Server 10.9.1. and ArcPro 3.1.2
 2022-06-30 Tested with Server 10.9.1, ArcGIS Pro 2.9.3
 2022-06-22 This version does not preserve comments.
 
@@ -23,6 +24,15 @@ from arcgis.gis import GIS
 from datetime import datetime
 from portal import PortalContent
 from config import Config
+from watermark import mark
+
+DEPRECATED_THUMBNAIL = 'assets/deprecated.png'
+WORKSPACE = 'c:\\Temp'
+assert(os.path.exists(DEPRECATED_THUMBNAIL))
+assert(os.path.exists(WORKSPACE))
+
+
+
 
 def replace_service(gis: object, staged_item: str, target_item: str, archive_name: str) -> None:
     """
@@ -126,16 +136,19 @@ class ReleaseBasemapServices(object):
                 "staged_title": "Vector Tiles STAGED",
                 "target_title": "Vector Tiles",
                 "offline": True,  # Allow use in an offline map
+                "thumbnail" : "assets/full_basemap.png",
             },
             {  # This is the layer with only the labels
                 "staged_title": "Vector Tile Labels STAGED",
                 "target_title": "Vector Tile Labels",
                 "offline": True,  # Allow use in an offline map
+                "thumbnail" : "assets/labels_only.png",
             },
             {  # This is the layer with only the shapes
                 "staged_title": "Unlabeled Vector Tiles STAGED",
                 "target_title": "Unlabeled Vector Tiles",
                 "offline": True,  # Allow use in an offline map
+                "thumbnail" : "assets/tiles_only.png",
             }
         ]
 
@@ -147,7 +160,7 @@ class ReleaseBasemapServices(object):
         release_groups = portal.getGroups(Config.RELEASE_GROUP_LIST)
 
         for service in services:
-            print(service)
+            #print(service)
 
             staged_title = service['staged_title']
             staged_item = portal.getServiceItem(staged_title)
@@ -194,6 +207,29 @@ class ReleaseBasemapServices(object):
                     print("WARNING", e)
                     pass
 
+                try:
+                # I don't think the target_item object works here. 
+                # so I grab the ID again.
+                    archived_item = portal.getServiceItem(archive_name)
+                    thumbnail = DEPRECATED_THUMBNAIL
+                    tn_target = os.path.join(WORKSPACE, 'deprecated.png')
+                    tn = mark(thumbnail, tn_target, 
+                        caption="** DEPRECATED **", textmark=textmark)
+                    archived_item.update(thumbnail=tn)
+                    os.unlink(tn)
+                except Exception as e:
+                    arcpy.AddMessage(f"Could not update archive thumbnail, darn. {e}")
+
+            try:
+                thumbnail = service['thumbnail']
+                tn_target = os.path.join(WORKSPACE, 'thumbnail.png')
+                tn = mark(thumbnail, tn_target, 
+                    caption=target_title, textmark=textmark)
+                target_item.update(thumbnail=tn)
+                os.unlink(tn)
+            except Exception as e:
+                arcpy.AddMessage(f"Could not update archive thumbnail, darn. {e}")
+
             try:
                 target_item.share(everyone=True, groups=release_groups)
                 target_item.protect(enable = True)
@@ -201,7 +237,7 @@ class ReleaseBasemapServices(object):
             except Exception as e:
                 print("ERROR:", e)
 
-            return
+        return
 
 
 if __name__ == "__main__":

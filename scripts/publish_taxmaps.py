@@ -43,12 +43,15 @@ if __name__ == "__main__":
     ]
  
     for mapd in maps:
+        FIXME - this has changed, add thumbnail code here see publish_roads
+
         map = aprx.listMaps(mapd['name'])[0]
         try:
             sd_file = BuildSD(map, mapd)
         except:
             # Perhaps analysis failed?
             continue
+        
         PublishFromSD(gis, map, mapd, sd_file)
             
     print("All done!!!")

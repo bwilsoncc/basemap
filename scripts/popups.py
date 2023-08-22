@@ -103,8 +103,8 @@ def makeLayer(layer: arcpy._mp.Layer) -> dict:
 
 def makePopup(layers: arcpy._mp.Layer) -> dict:
     """
-    Using an arcpy layer list as input,
-    a list of layers to define a popup, in a dict.
+    Using an arcpy layer list as input
+    Return a list of layers to define a popup, in a dict.
     """
     popupLayers = list()
     for layer in layers:
@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     SHOWPOPUP = True
 
-    mapname = "Roads Test"
+    mapname = "Roads"
     aprx = arcpy.mp.ArcGISProject(Config.BASEMAP_APRX)
     map = aprx.listMaps(mapname)[0]
 

@@ -35,6 +35,10 @@ class PortalContent(object):
         self.gis = gis
         return
 
+    def getItemUrl(self, item: str) -> None:
+        """ Show the ID of an item formatted as a Portal URL """
+        return f"{self.gis.url}/home/item.html?id={item['id']}"
+
 
     def findItems(self, title=None, name=None, type=None) -> list:
         """ 
@@ -65,7 +69,7 @@ class PortalContent(object):
     def findItem(self, title=None, name=None, type=None) -> object:
         """ 
         Search the Portal using any combination of name, title, and type.
-        Return the item if EXACTLY ONE MATCH is found, else None.
+        Return the "item" object if EXACTLY ONE MATCH is found, else None.
         """
         items = self.findItems(title, name, type)
         if not items or len(items)!=1:
@@ -87,22 +91,26 @@ class PortalContent(object):
         """
         Given the service title and type, 
         make sure it matches only 1 existing service,
-        return it.
+        Return the "item" object.
 
         Services can have identical names, so use a type setting (eg portalcontentmanager.MapImageLayer) to specify one.
         """
         item = None
-        ids = self.findIds(title=title, type=type)
-        if len(ids) != 1:
+        items = self.findItems(title=title, type=type)
+        if len(items) != 1:
             # If there are multiple services with the same name, you need to delete the extra(s) yourself!
-            print("ERROR: %d matches for \"%s\" found." % (len(ids), title))
-            if len(ids):
-                print("Service IDs:", ids)
-                for id in ids:
-                    print(self.gis.content.get(id))
+            print(f"ERROR: {len(items)} matches for \"{title}\" found.")
+            if len(items):
+                # I print all the service names as URLs so you can 
+                # use Ctl-Click to open them in a browser.
+                print("Service IDs:")
+                for item in items:
+                    print(self.getItemUrl(item))
         else:
             # Load the metadata from the existing layer.
-            item = self.gis.content.get(ids[0])
+            d = items[0] # This is a dictionary
+            item = self.gis.content.get(d['id']) # this is an "item".
+
         return item
 
 
@@ -160,7 +168,7 @@ class PortalContent(object):
 
 
     @staticmethod
-    def show(items) -> None:
+    def show(items: list) -> None:
         """ Show brief information about an item or each item in a list. """
         if items:
     #       print(json.dumps(items, indent=4)) # This is the verbose version
@@ -168,7 +176,7 @@ class PortalContent(object):
             for item in items:
                 print(item)
         return
-
+    
 
 ##################################################################################
 if __name__ == '__main__':
@@ -177,11 +185,20 @@ if __name__ == '__main__':
 
     from config import Config
     import json
-    assert GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
-    gis = GIS(url=Config.PORTAL_URL, profile=Config.PORTAL_PROFILE)
+    gis = GIS(Config.PORTAL_URL, Config.PORTAL_USER, Config.PORTAL_PASSWORD)
+    assert gis
+    # FIXME SOMEDAY
+    #gis = GIS(url=Config.PORTAL_URL, profile=Config.PORTAL_PROFILE)
     assert gis
     print("Logged in as " + str(gis.properties.user.username))
     pcm = PortalContent(gis)
+
+    item = pcm.findItem(title='Vector Tiles', type=pcm.VectorTileService)
+    assert item
+    PortalContent.show(item)
+
+    item = pcm.getServiceItem(title='Roads')
+    assert item
 
     items = pcm.findItems(title='Roads')
     PortalContent.show(items)
@@ -198,22 +215,23 @@ if __name__ == '__main__':
     items = pcm.findItems(type=pcm.MapImageLayer)
     PortalContent.show(items)
 
-    items = pcm.findItems(title='Vector Tiles STAGED', type=pcm.VectorTileService)
+    items = pcm.findItems(title='Vector Tiles', type=pcm.VectorTileService)
     PortalContent.show(items)
 
-    ids = pcm.findIds(title='Vector Tiles STAGED', type=pcm.VectorTileService)
+    ids = pcm.findIds(title='Vector Tiles', type=pcm.VectorTileService)
+    assert(len(ids)==1) 
     PortalContent.show(ids)
 
-    item = pcm.findItem(title='Vector Tiles STAGED', type=pcm.VectorTileService)
-    PortalContent.show(item)
-
     svc = pcm.getServiceItem("DELETEME_Roads", type=pcm.MapImageLayer)
+    assert(not svc)
     PortalContent.show(svc)
 
     svc = pcm.getServiceItem("DELETEME_Roads")
+    assert(not svc)
     PortalContent.show(svc)
 
     groups = pcm.getGroups(Config.STAGING_GROUP_LIST)
+    assert groups
     print(groups)
 
     groups = pcm.getGroups(Config.RELEASE_GROUP_LIST)
